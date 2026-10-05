@@ -11,6 +11,14 @@ engine built for fast realtime data on the keys.
   pulsing warm glow) behind the buttons.
 - **Virtual deck:** the same layout in a browser at http://localhost:9902, for
   working without hardware or as a second surface. It only renders while a page is open.
+- **Background states:** named states light the whole deck to signal something
+  (highest priority wins, plain black when none are active). Raise one from anywhere:
+  `echo "bg.alert #d0343a 1.5 20" | nc -u -w0 127.0.0.1 9900` (colour, pulse seconds or 0
+  for steady, priority), and `bg.alert off` to clear it.
+- **Claude Code key:** shows how many Claude Code sessions are waiting on you (and pulses
+  the deck amber); press it to jump to that session's terminal tab, and again to step
+  through the others (exact tab in iTerm and Ghostty). The Claude page has one key per session. Needs `scripts/claude-status.sh`
+  registered as an async Claude Code hook (see the script for the events).
 - **Standby:** a SLEEP key darkens the deck; a WAKE key brings it back.
 - **Push data in over UDP:** `echo "a 42.1" | nc -u -w0 127.0.0.1 9900`
 - **TouchDesigner link:** two-way toggle/pulse control of parameters (see `td/`).

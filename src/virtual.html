@@ -34,6 +34,29 @@
     user-select: none;
     -webkit-touch-callout: none;
   }
+  .toolbar {
+    width: min(100%, 960px);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .toolbar label { color: var(--text); }
+  select {
+    appearance: none;
+    min-width: 160px;
+    padding: 7px 34px 7px 12px;
+    color: #eee;
+    font: inherit;
+    font-weight: 600;
+    background: var(--body) no-repeat right 12px center / 10px 6px
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    border: 1px solid var(--body-edge);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  select:hover { border-color: #3f3f46; }
+  select:focus-visible { outline: 2px solid var(--ok); outline-offset: 2px; }
+  select:disabled { opacity: 0.5; cursor: default; }
   .deck {
     width: min(100%, 960px);
     padding: clamp(10px, 2.5vw, 26px);
@@ -64,12 +87,30 @@
 </style>
 </head>
 <body>
+  <div class="toolbar">
+    <label for="page">Page</label>
+    <select id="page" disabled></select>
+  </div>
   <div class="deck"><div class="keys" id="keys"></div></div>
   <div class="status" id="status"><span class="dot"></span><span id="status-text">connecting…</span></div>
 <script>
 const keysEl = document.getElementById('keys');
 const statusEl = document.getElementById('status');
 const statusText = document.getElementById('status-text');
+const pageSelect = document.getElementById('page');
+pageSelect.addEventListener('change', () => {
+  ws?.readyState === 1 && ws.send(JSON.stringify({ type: 'page', index: Number(pageSelect.value) }));
+  pageSelect.blur();
+});
+
+function showPages(names, index) {
+  const current = [...pageSelect.options].map((o) => o.textContent);
+  if (current.join('\n') !== names.join('\n')) {
+    pageSelect.replaceChildren(...names.map((name, i) => new Option(name, String(i))));
+  }
+  pageSelect.value = String(index);
+  pageSelect.disabled = false;
+}
 let ws;
 let canvases = new Map();
 // Images decode asynchronously, so a newer frame can finish before an older
@@ -139,12 +180,15 @@ function connect() {
     if (msg.type === 'hello') {
       build(msg.keys, msg.keySize);
       setBrightness(msg.brightness);
+    } else if (msg.type === 'pages') {
+      showPages(msg.names, msg.index);
     } else if (msg.type === 'brightness') {
       setBrightness(msg.value);
     }
   };
   ws.onclose = () => {
     statusEl.classList.remove('live');
+    pageSelect.disabled = true;
     statusText.textContent = 'greendeck not running, retrying…';
     setTimeout(connect, 1000);
   };

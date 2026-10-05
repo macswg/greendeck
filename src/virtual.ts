@@ -5,6 +5,7 @@ import jpeg from '@julusian/jpeg-turbo';
 import { DeviceModelId, getModelInfo, type StreamDeckControlDefinition } from '@elgato-stream-deck/node';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { Surface } from './engine.ts';
+import type { Pager } from './pages.ts';
 
 /** Stop queueing frames to a client once this much is waiting to be sent. */
 const MAX_BUFFERED = 256 * 1024;
@@ -31,6 +32,8 @@ export class VirtualDeck extends EventEmitter implements Surface {
   #images = new Map<number, Buffer>();
   #brightness = 100;
   #clients = new Set<Client>();
+  #pager: Pager | undefined;
+  #unsubscribePager: (() => void) | undefined;
 
   constructor(model: DeviceModelId = DeviceModelId.XL) {
     super();
@@ -69,12 +72,27 @@ export class VirtualDeck extends EventEmitter implements Surface {
     for (const { ws } of this.#clients) ws.send(JSON.stringify({ type: 'brightness', value: percent }));
   }
 
+  /** Lets the page show a page picker that follows, and controls, this pager. */
+  attachPager(pager: Pager | undefined): void {
+    this.#unsubscribePager?.();
+    this.#pager = pager;
+    this.#unsubscribePager = pager?.subscribe(() => this.#sendPages());
+    this.#sendPages();
+  }
+
+  #sendPages(): void {
+    if (!this.#pager) return;
+    const msg = JSON.stringify({ type: 'pages', names: this.#pager.names, index: this.#pager.index });
+    for (const { ws } of this.#clients) ws.send(msg);
+  }
+
   #accept(ws: WebSocket): void {
     const client: Client = { ws, pending: new Map(), retry: undefined };
     this.#clients.add(client);
 
     const keys = this.CONTROLS.flatMap((c) => (c.type === 'button' ? [{ index: c.index, row: c.row, column: c.column }] : []));
     ws.send(JSON.stringify({ type: 'hello', keySize: this.#keySize, keys, brightness: this.#brightness }));
+    if (this.#pager) ws.send(JSON.stringify({ type: 'pages', names: this.#pager.names, index: this.#pager.index }));
     for (const [index, image] of this.#images) this.#queue(client, index, image);
     if (this.#clients.size === 1) this.emit('connect');
 
@@ -84,6 +102,10 @@ export class VirtualDeck extends EventEmitter implements Surface {
       try {
         msg = JSON.parse(String(data));
       } catch {
+        return;
+      }
+      if (msg.type === 'page' && Number.isInteger(msg.index)) {
+        this.#pager?.go(msg.index as number);
         return;
       }
       const control = this.CONTROLS.find((c) => c.type === 'button' && c.index === msg.index);

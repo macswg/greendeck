@@ -53,6 +53,7 @@ export class Engine {
   #bgCanvas: Canvas;
   #startedAt = performance.now();
   #standby = false;
+  #onStop: (() => void)[] = [];
   #standbyWidgets = new Map<number, Widget>();
   #brightness: number;
   #standbyBrightness: number;
@@ -93,6 +94,11 @@ export class Engine {
     });
   }
 
+  /** Run when this engine stops, e.g. to unsubscribe from shared services. */
+  onStop(fn: () => void): void {
+    this.#onStop.push(fn);
+  }
+
   onStats(fn: () => void): () => void {
     this.#onStats.add(fn);
     return () => this.#onStats.delete(fn);
@@ -107,6 +113,12 @@ export class Engine {
 
   mount(index: number, widget: Widget): void {
     this.#mountInto(this.#widgets, index, widget);
+  }
+
+  /** Clear a key back to just the background. */
+  unmount(index: number): void {
+    this.#widgets.get(index)?.detach();
+    if (this.#widgets.delete(index) && !this.#standby) this.invalidate(index);
   }
 
   /**
@@ -158,6 +170,7 @@ export class Engine {
     this.#stopped = true;
     clearTimeout(this.#timer);
     clearInterval(this.#statsTimer);
+    for (const fn of this.#onStop.splice(0)) fn();
     for (const w of [...this.#widgets.values(), ...this.#standbyWidgets.values()]) w.detach();
     this.#widgets.clear();
     this.#standbyWidgets.clear();

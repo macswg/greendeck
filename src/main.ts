@@ -26,9 +26,10 @@ function startVirtualDeck(): void {
   let engine: Engine | undefined;
   deck.on('connect', () => {
     engine = new Engine(deck, { maxFps: VIRTUAL_FPS, brightness: BRIGHTNESS });
-    layout(engine, services);
+    deck.attachPager(layout(engine, services));
   });
   deck.on('disconnect', () => {
+    deck.attachPager(undefined);
     void engine?.stop();
     engine = undefined;
   });
