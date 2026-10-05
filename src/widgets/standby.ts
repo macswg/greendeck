@@ -22,14 +22,15 @@ export class SleepButton extends Widget {
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, s, s);
-    ctx.arc(s / 2 + 8, s * 0.36 - 6, 13, 0, Math.PI * 2);
+    ctx.arc(s / 2 + 5, s * 0.4 - 3.5, 8, 0, Math.PI * 2);
     ctx.clip('evenodd');
-    ctx.fillStyle = colors.text;
+    // Same grey as the label, so the key reads as a quiet utility.
+    ctx.fillStyle = colors.dim;
     ctx.beginPath();
-    ctx.arc(s / 2, s * 0.36, 15, 0, Math.PI * 2);
+    ctx.arc(s / 2, s * 0.4, 9, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-    text(ctx, 'SLEEP', s / 2, s * 0.74, { size: 18, maxWidth: s - 14 });
+    text(ctx, 'SLEEP', s / 2, s * 0.72, { size: 13, maxWidth: s - 14, weight: 'normal', color: colors.dim });
   }
 }
 
@@ -51,15 +52,15 @@ export class WakeButton extends Widget {
     roundedFill(ctx, s, '#1a0e02');
     // Power symbol: an open ring with a bar through the gap.
     ctx.strokeStyle = warm;
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 3.5;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.arc(s / 2, s * 0.4, 16, -Math.PI / 2 + 0.7, -Math.PI / 2 - 0.7 + Math.PI * 2);
+    ctx.arc(s / 2, s * 0.42, 11, -Math.PI / 2 + 0.7, -Math.PI / 2 - 0.7 + Math.PI * 2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(s / 2, s * 0.4 - 22);
-    ctx.lineTo(s / 2, s * 0.4 - 4);
+    ctx.moveTo(s / 2, s * 0.42 - 15);
+    ctx.lineTo(s / 2, s * 0.42 - 3);
     ctx.stroke();
-    text(ctx, 'WAKE', s / 2, s * 0.78, { size: 18, maxWidth: s - 14, color: warm });
+    text(ctx, 'WAKE', s / 2, s * 0.74, { size: 13, maxWidth: s - 14, weight: 'normal', color: warm });
   }
 }
