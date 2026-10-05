@@ -40,10 +40,12 @@ export class ClaudeKey extends Widget {
     if (waiting.length) {
       const oldest = waiting[0];
       roundedFill(ctx, s, CLAUDE_COLOR);
-      text(ctx, 'CLAUDE', s / 2, s * 0.22, { size: 16, maxWidth: s - 14, color: '#000' });
-      text(ctx, String(waiting.length), s / 2, s * 0.5, { size: 30, maxWidth: s - 14, color: '#000' });
-      text(ctx, `waiting ${ago(oldest.since).replace(/^for /, '')}`, s / 2, s * 0.78, {
-        size: 12,
+      // Count, then which project has waited longest (the one a press jumps to).
+      text(ctx, 'CLAUDE', s / 2, s * 0.17, { size: 13, maxWidth: s - 14, color: '#000' });
+      text(ctx, String(waiting.length), s / 2, s * 0.4, { size: 22, maxWidth: s - 14, color: '#000' });
+      text(ctx, oldest.project || '?', s / 2, s * 0.63, { size: 14, maxWidth: s - 12, color: '#000' });
+      text(ctx, `waiting ${ago(oldest.since).replace(/^for /, '')}`, s / 2, s * 0.83, {
+        size: 11,
         maxWidth: s - 12,
         weight: 'normal',
         color: '#000',
