@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0b0c">
+<title>greendeck</title>
+<style>
+  :root {
+    --bg: #0b0b0c;
+    --body: #18181b;
+    --body-edge: #26262a;
+    --text: #a1a1aa;
+    --ok: #1db954;
+    --warn: #d9a400;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 16px;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .deck {
+    width: min(100%, 960px);
+    padding: clamp(10px, 2.5vw, 26px);
+    background: var(--body);
+    border: 1px solid var(--body-edge);
+    border-radius: clamp(12px, 2vw, 22px);
+    box-shadow: 0 20px 60px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.04);
+  }
+  .keys {
+    display: grid;
+    gap: clamp(6px, 1.6vw, 16px);
+    transition: filter 0.3s;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 12%;
+    background: #000;
+    cursor: pointer;
+    touch-action: none;
+    transition: transform 0.06s;
+  }
+  canvas.down { transform: scale(0.93); }
+  .status { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+  .status.live .dot { background: var(--ok); }
+</style>
+</head>
+<body>
+  <div class="deck"><div class="keys" id="keys"></div></div>
+  <div class="status" id="status"><span class="dot"></span><span id="status-text">connecting…</span></div>
+<script>
+const keysEl = document.getElementById('keys');
+const statusEl = document.getElementById('status');
+const statusText = document.getElementById('status-text');
+let ws;
+let canvases = new Map();
+// Images decode asynchronously, so a newer frame can finish before an older
+// one. Track the newest frame drawn per key and drop anything older.
+let frameSeq = 0;
+const drawnSeq = new Map();
+
+function build(keys, keySize) {
+  const cols = Math.max(...keys.map((k) => k.column)) + 1;
+  keysEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  keysEl.replaceChildren();
+  canvases = new Map();
+  drawnSeq.clear();
+  for (const key of [...keys].sort((a, b) => a.row - b.row || a.column - b.column)) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = keySize;
+    canvas.style.gridRow = key.row + 1;
+    canvas.style.gridColumn = key.column + 1;
+    const send = (type) => ws?.readyState === 1 && ws.send(JSON.stringify({ type, index: key.index }));
+    canvas.addEventListener('pointerdown', (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      canvas.classList.add('down');
+      send('down');
+    });
+    const release = () => {
+      if (!canvas.classList.contains('down')) return;
+      canvas.classList.remove('down');
+      send('up');
+    };
+    canvas.addEventListener('pointerup', release);
+    canvas.addEventListener('pointercancel', release);
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    keysEl.append(canvas);
+    canvases.set(key.index, canvas);
+  }
+}
+
+function setBrightness(percent) {
+  // The real backlight is still readable at low settings; mimic that rather
+  // than going fully dark.
+  keysEl.style.filter = `brightness(${Math.min(1, 0.15 + percent / 80)})`;
+}
+
+async function drawKey(data) {
+  const bytes = new Uint8Array(data);
+  const index = bytes[0];
+  const canvas = canvases.get(index);
+  if (!canvas) return;
+  const seq = ++frameSeq;
+  const bitmap = await createImageBitmap(new Blob([bytes.subarray(1)], { type: 'image/jpeg' }));
+  if (seq < (drawnSeq.get(index) ?? 0)) return bitmap.close();
+  drawnSeq.set(index, seq);
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+}
+
+function connect() {
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => {
+    statusEl.classList.add('live');
+    statusText.textContent = 'live';
+  };
+  ws.onmessage = (e) => {
+    if (typeof e.data !== 'string') return void drawKey(e.data);
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'hello') {
+      build(msg.keys, msg.keySize);
+      setBrightness(msg.brightness);
+    } else if (msg.type === 'brightness') {
+      setBrightness(msg.value);
+    }
+  };
+  ws.onclose = () => {
+    statusEl.classList.remove('live');
+    statusText.textContent = 'greendeck not running, retrying…';
+    setTimeout(connect, 1000);
+  };
+}
+
+connect();
+</script>
+</body>
+</html>

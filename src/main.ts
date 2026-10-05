@@ -2,14 +2,38 @@ import { listStreamDecks, openStreamDeck, type StreamDeck } from '@elgato-stream
 import { Engine } from './engine.ts';
 import { createServices, layout } from './layout.ts';
 import { PushHub } from './push.ts';
+import { VirtualDeck } from './virtual.ts';
 
 const PUSH_PORT = Number(process.env.GREENDECK_PUSH_PORT ?? 9900);
 const MAX_FPS = Number(process.env.GREENDECK_MAX_FPS ?? 60);
 const BRIGHTNESS = Number(process.env.GREENDECK_BRIGHTNESS ?? 70);
+// Set GREENDECK_VIRTUAL_PORT=0 to turn the browser deck off. It only listens on
+// this machine unless GREENDECK_VIRTUAL_HOST opens it up (e.g. 0.0.0.0 for a
+// phone on the LAN; anyone who can reach it can press buttons).
+const VIRTUAL_PORT = Number(process.env.GREENDECK_VIRTUAL_PORT ?? 9902);
+const VIRTUAL_HOST = process.env.GREENDECK_VIRTUAL_HOST ?? '127.0.0.1';
+const VIRTUAL_FPS = Number(process.env.GREENDECK_VIRTUAL_FPS ?? 30);
 
 const push = new PushHub();
 push.listen(PUSH_PORT);
 const services = createServices(push);
+
+if (VIRTUAL_PORT) startVirtualDeck();
+
+/** The browser deck gets its own engine, running only while a page is open. */
+function startVirtualDeck(): void {
+  const deck = new VirtualDeck();
+  let engine: Engine | undefined;
+  deck.on('connect', () => {
+    engine = new Engine(deck, { maxFps: VIRTUAL_FPS, brightness: BRIGHTNESS });
+    layout(engine, services);
+  });
+  deck.on('disconnect', () => {
+    void engine?.stop();
+    engine = undefined;
+  });
+  deck.listen(VIRTUAL_PORT, VIRTUAL_HOST);
+}
 
 let current: { deck: StreamDeck; engine: Engine } | undefined;
 

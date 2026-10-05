@@ -1,7 +1,18 @@
 import { createCanvas, type Canvas } from '@napi-rs/canvas';
-import type { StreamDeck } from '@elgato-stream-deck/node';
+import type { StreamDeckControlDefinition } from '@elgato-stream-deck/node';
 import type { Background } from './background.ts';
 import type { Widget } from './widget.ts';
+
+/**
+ * What the engine needs from a deck. A real StreamDeck satisfies it, and so
+ * does VirtualDeck, so the same layout can drive either.
+ */
+export interface Surface {
+  readonly CONTROLS: Readonly<StreamDeckControlDefinition[]>;
+  on(event: 'down' | 'up', fn: (control: StreamDeckControlDefinition) => void): unknown;
+  fillKeyBuffer(index: number, pixels: Uint8ClampedArray, options: { format: 'rgba' }): Promise<void>;
+  setBrightness(percent: number): Promise<void>;
+}
 
 /** Background canvas resolution relative to the panel; it's scaled up smoothly. */
 const BG_SCALE = 1 / 8;
@@ -23,7 +34,7 @@ export class Engine {
   readonly size: number;
   readonly stats: EngineStats = { fps: 0, keysPerSec: 0, frameMs: 0 };
 
-  #deck: StreamDeck;
+  #deck: Surface;
   #minFrameMs: number;
   #widgets = new Map<number, Widget>();
   #canvases = new Map<number, Canvas>();
@@ -46,7 +57,7 @@ export class Engine {
   #brightness: number;
   #standbyBrightness: number;
 
-  constructor(deck: StreamDeck, opts: { maxFps?: number; brightness?: number; standbyBrightness?: number } = {}) {
+  constructor(deck: Surface, opts: { maxFps?: number; brightness?: number; standbyBrightness?: number } = {}) {
     this.#deck = deck;
     this.#minFrameMs = 1000 / (opts.maxFps ?? 60);
     this.#brightness = opts.brightness ?? 70;

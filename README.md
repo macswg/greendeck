@@ -9,6 +9,8 @@ engine built for fast realtime data on the keys.
   latest value with at most one frame of lag.
 - **Backgrounds:** one animated image across the whole panel (a rainbow wave or a
   pulsing warm glow) behind the buttons.
+- **Virtual deck:** the same layout in a browser at http://localhost:9902, for
+  working without hardware or as a second surface. It only renders while a page is open.
 - **Standby:** a SLEEP key darkens the deck; a WAKE key brings it back.
 - **Push data in over UDP:** `echo "a 42.1" | nc -u -w0 127.0.0.1 9900`
 - **TouchDesigner link:** two-way toggle/pulse control of parameters (see `td/`).
@@ -16,7 +18,8 @@ engine built for fast realtime data on the keys.
 
 ## Run
 
-Requires Node 23.6+ (runs the TypeScript directly) and a Stream Deck.
+Requires Node 23.6+ (runs the TypeScript directly). A Stream Deck is optional:
+without one, use the virtual deck at http://localhost:9902.
 Quit the Elgato app and Companion first, since only one app can use the deck at a time.
 
 ```sh
@@ -32,6 +35,9 @@ Edit `src/layout.ts` to change what goes on each key.
 | `GREENDECK_MAX_FPS` | 60 | Frame-rate cap |
 | `GREENDECK_PUSH_PORT` | 9900 | UDP port for pushed values |
 | `GREENDECK_TD_PORT` | 9901 | TouchDesigner's UDP port |
+| `GREENDECK_VIRTUAL_PORT` | 9902 | Browser deck port (0 to turn it off) |
+| `GREENDECK_VIRTUAL_HOST` | 127.0.0.1 | Set to 0.0.0.0 to reach it from a phone. Anyone on your network can then press buttons |
+| `GREENDECK_VIRTUAL_FPS` | 30 | Browser deck frame-rate cap |
 | `GREENDECK_STATS` | | Set to log fps and keys/s every second |
 
 ## TouchDesigner
