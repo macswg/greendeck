@@ -17,7 +17,7 @@ const JPEG_QUALITY = Number(process.env.GREENDECK_JPEG_QUALITY ?? 97);
 // phone on the LAN; anyone who can reach it can press buttons).
 const VIRTUAL_PORT = Number(process.env.GREENDECK_VIRTUAL_PORT ?? 9902);
 const VIRTUAL_HOST = process.env.GREENDECK_VIRTUAL_HOST ?? '127.0.0.1';
-const VIRTUAL_FPS = Number(process.env.GREENDECK_VIRTUAL_FPS ?? 30);
+const VIRTUAL_FPS = Number(process.env.GREENDECK_VIRTUAL_FPS ?? 60);
 
 const push = new PushHub();
 push.listen(PUSH_PORT);

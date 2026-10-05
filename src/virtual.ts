@@ -139,6 +139,10 @@ export class VirtualDeck extends EventEmitter implements Surface {
       } catch {
         return;
       }
+      if (msg.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong', t: (msg as { t?: unknown }).t }));
+        return;
+      }
       if (msg.type === 'backlight' && typeof msg.value === 'number') {
         this.emit('backlight', msg.value);
         return;

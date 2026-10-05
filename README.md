@@ -58,7 +58,7 @@ Edit `src/layout.ts` to change what goes on each key.
 | `GREENDECK_TD_PORT` | 9901 | TouchDesigner's UDP port |
 | `GREENDECK_VIRTUAL_PORT` | 9902 | Browser deck port (0 to turn it off) |
 | `GREENDECK_VIRTUAL_HOST` | 127.0.0.1 | Set to 0.0.0.0 to reach it from a phone. Anyone on your network can then press buttons |
-| `GREENDECK_VIRTUAL_FPS` | 30 | Browser deck frame-rate cap |
+| `GREENDECK_VIRTUAL_FPS` | 60 | Browser deck frame-rate cap |
 | `GREENDECK_STATS` | | Set to log fps and keys/s every second |
 
 ## Personal buttons

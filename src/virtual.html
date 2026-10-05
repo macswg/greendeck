@@ -132,9 +132,11 @@
     background: #000;
     cursor: pointer;
     touch-action: none;
-    transition: transform 0.06s;
+    transition: transform 0.12s, filter 0.12s;
   }
-  canvas.down { transform: scale(0.93); }
+  /* Shown the instant a finger lands, before the deck has even heard about
+     the press (over a phone's connection that's a round trip away). */
+  canvas.down { transform: scale(0.92); filter: brightness(1.6); transition: none; }
   .status { display: flex; align-items: center; gap: 8px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
   .status.live .dot { background: var(--ok); }
@@ -429,6 +431,7 @@ function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   ws.binaryType = 'arraybuffer';
   ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'ping', t: performance.now() }));
     statusEl.classList.add('live');
     statusText.textContent = 'live';
   };
@@ -436,9 +439,13 @@ function connect() {
     if (typeof e.data !== 'string') return void drawKey(e.data);
     const msg = JSON.parse(e.data);
     if (msg.type === 'hello') {
-      document.getElementById('version').textContent = msg.version || '';
+      versionText = msg.version || '';
+      showVersion();
       build(msg.keys, msg.keySize);
       setBrightness(msg.brightness);
+    } else if (msg.type === 'pong') {
+      rtt = Math.round(performance.now() - msg.t);
+      showVersion();
     } else if (msg.type === 'backlight') {
       showBacklight(msg.value);
     } else if (msg.type === 'pages') {
@@ -457,6 +464,15 @@ function connect() {
     retry = setTimeout(connect, 1000);
   };
 }
+
+// Round trip to greendeck, shown next to the version: the delay every press
+// and key update has on top of the deck itself.
+let versionText = '';
+let rtt;
+function showVersion() {
+  document.getElementById('version').textContent = rtt === undefined ? versionText : `${versionText} · ${rtt} ms`;
+}
+setInterval(() => ws?.readyState === 1 && !document.hidden && ws.send(JSON.stringify({ type: 'ping', t: performance.now() })), 3000);
 
 let retry;
 connect();
