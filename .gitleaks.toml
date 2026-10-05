@@ -1,0 +1,19 @@
+# Secret scanning rules, used by the pre-commit hook and CI.
+# Starts from gitleaks' built-in rules (API keys, tokens, private keys, ...)
+# and adds checks for personal details that aren't secrets but shouldn't be public.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "personal-home-path"
+description = "Absolute home directory path (leaks a username; use ~ or a relative path)"
+regex = '''(/Users/|/home/)[A-Za-z0-9._-]+/'''
+
+[[rules]]
+id = "private-ip-address"
+description = "Private network address (use localhost or make it configurable)"
+regex = '''\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})\b'''
+
+[allowlist]
+paths = ['''package-lock\.json''']

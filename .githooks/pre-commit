@@ -1,0 +1,27 @@
+#!/bin/sh
+# Stops commits that would publish secrets, credentials or machine-local config.
+# This repo is public. Installed by `npm install` (core.hooksPath = .githooks).
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+# 1. Files that should never be committed, even if someone force-adds them.
+blocked=$(printf '%s\n' "$staged" \
+  | grep -E '(^|/)(\.env(\..*)?|.*\.local\..*|.*\.(pem|key|p12|pfx)|id_(rsa|ed25519).*|\.npmrc|credentials.*|secrets.*)$' \
+  | grep -v -E '(^|/)\.env\.example$')
+if [ -n "$blocked" ]; then
+  echo "pre-commit: refusing to commit secret or local-only files:" >&2
+  printf '  %s\n' $blocked >&2
+  echo "Unstage them with: git restore --staged <file>" >&2
+  exit 1
+fi
+
+# 2. Secret scan of the staged changes (rules in .gitleaks.toml).
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks is required to commit here. Install it: brew install gitleaks" >&2
+  exit 1
+fi
+gitleaks git --pre-commit --staged --redact --no-banner --log-level warn || {
+  echo "pre-commit: gitleaks found something that looks sensitive (see above)." >&2
+  echo "Remove it, or if it's a false positive add a '# gitleaks:allow' comment on that line." >&2
+  exit 1
+}
