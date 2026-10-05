@@ -146,3 +146,43 @@ export class MonitorInputButton extends MonitorWidget {
     });
   }
 }
+
+/**
+ * Switches several monitors at once, e.g. "both on the laptop". Lit when every
+ * monitor is already on its preset input.
+ *
+ *   new MonitorPreset('LAPTOP', [[mon1, 'tb'], [mon2, 'tb']])
+ */
+export class MonitorPreset extends Widget {
+  #label: string;
+  #targets: readonly (readonly [Monitor, MonitorInput])[];
+  #unsubscribe: (() => void)[] = [];
+
+  constructor(label: string, targets: readonly (readonly [Monitor, MonitorInput])[]) {
+    super();
+    this.#label = label;
+    this.#targets = targets;
+  }
+
+  mount(): void {
+    this.#unsubscribe = this.#targets.map(([m]) => m.subscribe(() => this.invalidate()));
+  }
+
+  unmount(): void {
+    for (const fn of this.#unsubscribe) fn();
+  }
+
+  onDown(): void {
+    for (const [m, input] of this.#targets) void m.set(input);
+  }
+
+  render(ctx: SKRSContext2D, s: number): void {
+    const pending = this.#targets.some(([m]) => m.pending);
+    const active = !pending && this.#targets.every(([m, input]) => m.current === input);
+    roundedFill(ctx, s, pending ? colors.pending : active ? colors.active : colors.bg);
+    const ink = pending || active ? '#000' : colors.text;
+    text(ctx, this.#label, s / 2, s * 0.42, { size: 20, maxWidth: s - 14, color: ink });
+    const summary = this.#targets.map(([m, input]) => `${m.id}·${INPUT_LABELS[input]}`).join('  ');
+    text(ctx, summary, s / 2, s * 0.7, { size: 12, maxWidth: s - 12, weight: 'normal', color: pending || active ? '#000' : colors.dim });
+  }
+}

@@ -19,6 +19,19 @@ engine built for fast realtime data on the keys.
   the deck amber); press it to jump to that session's terminal tab, and again to step
   through the others (exact tab in iTerm and Ghostty). The Claude page has one key per session. Needs `scripts/claude-status.sh`
   registered as an async Claude Code hook (see the script for the events).
+- **Attention alert:** when something needs you (a Claude session waiting, or any
+  program sending `attention.<name> on`), a red KITT-style scanner sweeps the top row
+  twice, then rests 2 minutes, repeating until it's cleared.
+- **Pages** with ▲ / ▼ / title keys, and a page picker, brightness slider and
+  **Move buttons** mode (drag keys to rearrange; saved to `layout.local.json`) in the
+  browser deck.
+- **Hold-to-confirm** keys for anything consequential: stopping a recording, sleep,
+  fans, end of day.
+- **System keys:** CPU/GPU temperature and CPU/RAM load (via
+  [macmon](https://github.com/vladkens/macmon), `brew install macmon`), and a fan key
+  that toggles Macs Fan Control between Automatic and Full blast.
+- **Link buttons** that open a site or app with its icon, and an End of Day button for
+  a run-a-sequence web page.
 - **Standby:** a SLEEP key darkens the deck; a WAKE key brings it back.
 - **Push data in over UDP:** `echo "a 42.1" | nc -u -w0 127.0.0.1 9900`
 - **TouchDesigner link:** two-way toggle/pulse control of parameters (see `td/`).
@@ -47,6 +60,17 @@ Edit `src/layout.ts` to change what goes on each key.
 | `GREENDECK_VIRTUAL_HOST` | 127.0.0.1 | Set to 0.0.0.0 to reach it from a phone. Anyone on your network can then press buttons |
 | `GREENDECK_VIRTUAL_FPS` | 30 | Browser deck frame-rate cap |
 | `GREENDECK_STATS` | | Set to log fps and keys/s every second |
+
+## Personal buttons
+
+Buttons for your own sites, apps and machines go in `greendeck.local.json` (git-ignored),
+not in the code. Copy `greendeck.example.json` to start.
+
+## Browser deck on Tailscale
+
+To use the browser deck from your other devices, share it on your tailnet (HTTPS,
+tailnet only): `tailscale serve --bg 9902`. Anyone on the tailnet can then press
+every button.
 
 ## TouchDesigner
 

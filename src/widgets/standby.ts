@@ -1,23 +1,32 @@
 import type { SKRSContext2D } from '@napi-rs/canvas';
 import { Widget } from '../widget.ts';
-import { colors, roundedFill, text } from '../draw.ts';
+import { colors, keyFace, text } from '../draw.ts';
 import type { Engine } from '../engine.ts';
+import { drawHoldBar, Hold } from '../hold.ts';
 
-/** Puts the deck into standby. */
+/** Puts the deck into standby after a 1 s hold, so a stray tap can't. */
 export class SleepButton extends Widget {
-  #engine: Engine;
+  #hold: Hold;
 
   constructor(engine: Engine) {
     super();
-    this.#engine = engine;
+    this.#hold = new Hold(1000, () => engine.setStandby(true), () => this.invalidate());
   }
 
   onDown(): void {
-    this.#engine.setStandby(true);
+    this.#hold.start();
+  }
+
+  onUp(): void {
+    this.#hold.release();
+  }
+
+  unmount(): void {
+    this.#hold.cancel();
   }
 
   render(ctx: SKRSContext2D, s: number): void {
-    roundedFill(ctx, s, colors.bg);
+    keyFace(ctx, s, 'nav');
     // Crescent moon: a disc clipped to everything outside an offset disc.
     ctx.save();
     ctx.beginPath();
@@ -30,7 +39,15 @@ export class SleepButton extends Widget {
     ctx.arc(s / 2, s * 0.4, 9, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-    text(ctx, 'SLEEP', s / 2, s * 0.72, { size: 13, maxWidth: s - 14, weight: 'normal', color: colors.dim });
+    const progress = this.#hold.progress;
+    const hint = this.#hold.hinting;
+    text(ctx, hint ? 'HOLD' : 'SLEEP', s / 2, s * 0.7, {
+      size: 13,
+      maxWidth: s - 14,
+      weight: hint ? 'bold' : 'normal',
+      color: hint ? colors.text : colors.dim,
+    });
+    if (progress !== undefined) drawHoldBar(ctx, s, progress, colors.dim);
   }
 }
 
@@ -49,7 +66,7 @@ export class WakeButton extends Widget {
 
   render(ctx: SKRSContext2D, s: number): void {
     const warm = '#e8901c';
-    roundedFill(ctx, s, '#1a0e02');
+    keyFace(ctx, s, 'nav');
     // Power symbol: an open ring with a bar through the gap.
     ctx.strokeStyle = warm;
     ctx.lineWidth = 3.5;

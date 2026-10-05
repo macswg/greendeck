@@ -1,4 +1,4 @@
-import type { Canvas } from '@napi-rs/canvas';
+import type { Canvas, SKRSContext2D } from '@napi-rs/canvas';
 
 /**
  * Something drawn behind every key, as one image across the whole panel.
@@ -8,7 +8,25 @@ import type { Canvas } from '@napi-rs/canvas';
 export interface Background {
   /** Redraw every frame (otherwise drawn once). */
   readonly animated: boolean;
-  render(canvas: Canvas, timeSec: number): void;
+  /** Background frames per second, if it wants other than the engine default. */
+  readonly fps?: number;
+  /** `keys` gives each key's rect on the canvas, for lighting whole keys. */
+  render(canvas: Canvas, timeSec: number, keys: readonly KeyRect[]): void;
+}
+
+export interface KeyRect {
+  index: number;
+  row: number;
+  column: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Fill a key's rect plus a margin, so scaling never blurs black into its edges. */
+function fillKey(ctx: SKRSContext2D, k: KeyRect, margin = 3): void {
+  ctx.fillRect(k.x - margin, k.y - margin, k.w + margin * 2, k.h + margin * 2);
 }
 
 /** A rainbow that rolls across the deck, bent into a slow travelling wave. */
@@ -130,10 +148,7 @@ export class ColorPulse implements Background {
     min?: number;
     max?: number;
   } = {}) {
-    const hex = /^#?([0-9a-f]{6})$/i.exec(color)?.[1];
-    if (!hex) throw new Error(`ColorPulse: expected a #rrggbb colour, got "${color}"`);
-    const n = parseInt(hex, 16);
-    this.#rgb = [n >> 16, (n >> 8) & 0xff, n & 0xff];
+    this.#rgb = parseHex(color);
     this.#period = opts.period ?? 2.5;
     this.#min = opts.min ?? 0.15;
     this.#max = opts.max ?? 0.6;
@@ -163,6 +178,137 @@ export class ColorPulse implements Background {
     }
     ctx.putImageData(image, 0, 0);
   }
+}
+
+/**
+ * A band of colour that sweeps across the deck column by column, with a
+ * fading tail, like a chase light. Each column is one flat colour at a time,
+ * so there's no gradient inside a key to band; the motion comes from columns
+ * brightening and fading.
+ */
+export class ColorChase implements Background {
+  readonly animated = true;
+  #rgb: [number, number, number];
+  #period: number;
+  #columns: number;
+  #tail: number;
+  #min: number;
+  #max: number;
+
+  constructor(color: string, opts: {
+    /** Seconds for the band to cross the deck. */
+    period?: number;
+    /** Key columns on the deck. */
+    columns?: number;
+    /** How many columns the fading tail spans. */
+    tail?: number;
+    /** Brightness (0–1) of unlit columns and of the band's head. */
+    min?: number;
+    max?: number;
+  } = {}) {
+    this.#rgb = parseHex(color);
+    this.#period = opts.period ?? 1.6;
+    this.#columns = opts.columns ?? 8;
+    this.#tail = opts.tail ?? 2.5;
+    this.#min = opts.min ?? 0.05;
+    this.#max = opts.max ?? 0.6;
+  }
+
+  render(canvas: Canvas, t: number): void {
+    const { width: w, height: h } = canvas;
+    const ctx = canvas.getContext('2d');
+    const n = this.#columns;
+    const head = fract(t / this.#period) * n;
+    const [r, g, b] = this.#rgb;
+    for (let c = 0; c < n; c++) {
+      // How far this column is behind the head, wrapping round the deck.
+      const behind = (head - (c + 0.5) + n) % n;
+      // Rounded to a few levels so columns that barely change from one frame
+      // to the next stay identical and aren't re-sent.
+      const glow = Math.round(Math.exp(-behind / this.#tail) * Math.min(1, (n - behind) * 2) * 24) / 24;
+      const k = this.#min + (this.#max - this.#min) * glow;
+      ctx.fillStyle = `rgb(${r * k}, ${g * k}, ${b * k})`;
+      ctx.fillRect(Math.floor((c * w) / n), 0, Math.ceil(w / n) + 1, h);
+    }
+  }
+}
+
+/**
+ * A KITT-style scanner: one light sweeping back and forth along a row of keys,
+ * each key glowing as it passes and fading out behind it. Only that row
+ * changes, so it costs little and leaves the rest of the deck quiet.
+ */
+export class Scanner implements Background {
+  readonly animated = true;
+  readonly fps = 24;
+  #rgb: [number, number, number];
+  #period: number;
+  #columns: number;
+  #row: number;
+  #decay: number;
+  #levels: Float32Array;
+  #lastT: number | undefined;
+  #startT: number | undefined;
+
+  constructor(color: string, opts: {
+    /** Seconds for one sweep across and back. */
+    period?: number;
+    columns?: number;
+    /** Which row of keys it runs along (0 = top). */
+    row?: number;
+    /** Seconds for a key's afterglow to fade to about a third. */
+    decay?: number;
+  } = {}) {
+    this.#rgb = parseHex(color);
+    this.#period = opts.period ?? 1.8;
+    this.#columns = opts.columns ?? 8;
+    this.#row = opts.row ?? 0;
+    this.#decay = opts.decay ?? 0.22;
+    this.#levels = new Float32Array(this.#columns);
+  }
+
+  /** Seconds for one sweep across and back. */
+  get period(): number {
+    return this.#period;
+  }
+
+  render(canvas: Canvas, t: number, keys: readonly KeyRect[]): void {
+    const { width: w, height: h } = canvas;
+    const ctx = canvas.getContext('2d');
+    const n = this.#columns;
+    const dt = this.#lastT === undefined ? 0 : Math.max(0, t - this.#lastT);
+    this.#lastT = t;
+    // Sweeps start from the left whenever this scanner first shows.
+    this.#startT ??= t;
+
+    // Head position bounces 0 → n-1 → 0 (a triangle wave).
+    const phase = fract((t - this.#startT) / this.#period) * 2;
+    const head = (phase < 1 ? phase : 2 - phase) * (n - 1);
+    const fade = Math.exp(-dt / this.#decay);
+    for (let c = 0; c < n; c++) {
+      const lit = Math.max(0, 1 - Math.abs(head - c));
+      this.#levels[c] = Math.max(this.#levels[c] * fade, lit);
+    }
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, h);
+    const [r, g, b] = this.#rgb;
+    for (const key of keys) {
+      if (key.row !== this.#row || key.column >= n) continue;
+      // A few levels only, so a key that's fully faded stays identical.
+      const k = Math.round(this.#levels[key.column] * 20) / 20;
+      if (!k) continue;
+      ctx.fillStyle = `rgb(${r * k}, ${g * k}, ${b * k})`;
+      fillKey(ctx, key);
+    }
+  }
+}
+
+function parseHex(color: string): [number, number, number] {
+  const hex = /^#?([0-9a-f]{6})$/i.exec(color)?.[1];
+  if (!hex) throw new Error(`expected a #rrggbb colour, got "${color}"`);
+  const n = parseInt(hex, 16);
+  return [n >> 16, (n >> 8) & 0xff, n & 0xff];
 }
 
 function fract(n: number): number {

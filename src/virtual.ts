@@ -33,6 +33,7 @@ export class VirtualDeck extends EventEmitter implements Surface {
   #brightness = 100;
   #clients = new Set<Client>();
   #pager: Pager | undefined;
+  #backlight = 70;
   #unsubscribePager: (() => void) | undefined;
 
   constructor(model: DeviceModelId = DeviceModelId.XL) {
@@ -62,7 +63,14 @@ export class VirtualDeck extends EventEmitter implements Surface {
 
   async fillKeyBuffer(index: number, pixels: Uint8ClampedArray): Promise<void> {
     const raw = Buffer.from(pixels.buffer, pixels.byteOffset, pixels.byteLength);
-    const image = await jpeg.compress(raw, { format: jpeg.FORMAT_RGBA, width: this.#keySize, height: this.#keySize, quality: 90 });
+    const image = await jpeg.compress(raw, {
+      format: jpeg.FORMAT_RGBA,
+      width: this.#keySize,
+      height: this.#keySize,
+      // Same as the hardware: full-resolution colour, so gradients don't smear.
+      quality: 95,
+      subsampling: jpeg.SAMP_444,
+    });
     this.#images.set(index, image);
     for (const client of this.#clients) this.#queue(client, index, image);
   }
@@ -80,10 +88,22 @@ export class VirtualDeck extends EventEmitter implements Surface {
     this.#sendPages();
   }
 
+  /** Tell pages the backlight level, for the slider. */
+  showBacklight(percent: number): void {
+    this.#backlight = percent;
+    const msg = JSON.stringify({ type: 'backlight', value: percent });
+    for (const { ws } of this.#clients) ws.send(msg);
+  }
+
   #sendPages(): void {
     if (!this.#pager) return;
-    const msg = JSON.stringify({ type: 'pages', names: this.#pager.names, index: this.#pager.index });
+    const msg = JSON.stringify(this.#pagesMessage());
     for (const { ws } of this.#clients) ws.send(msg);
+  }
+
+  #pagesMessage() {
+    const pager = this.#pager!;
+    return { type: 'pages', names: pager.names, index: pager.index, fixed: pager.fixedKeys };
   }
 
   #accept(ws: WebSocket): void {
@@ -92,16 +112,25 @@ export class VirtualDeck extends EventEmitter implements Surface {
 
     const keys = this.CONTROLS.flatMap((c) => (c.type === 'button' ? [{ index: c.index, row: c.row, column: c.column }] : []));
     ws.send(JSON.stringify({ type: 'hello', keySize: this.#keySize, keys, brightness: this.#brightness }));
-    if (this.#pager) ws.send(JSON.stringify({ type: 'pages', names: this.#pager.names, index: this.#pager.index }));
+    if (this.#pager) ws.send(JSON.stringify(this.#pagesMessage()));
+    ws.send(JSON.stringify({ type: 'backlight', value: this.#backlight }));
     for (const [index, image] of this.#images) this.#queue(client, index, image);
     if (this.#clients.size === 1) this.emit('connect');
 
     ws.on('message', (data, isBinary) => {
       if (isBinary) return;
-      let msg: { type?: string; index?: number };
+      let msg: { type?: string; index?: number; value?: unknown; from?: unknown; to?: unknown };
       try {
         msg = JSON.parse(String(data));
       } catch {
+        return;
+      }
+      if (msg.type === 'backlight' && typeof msg.value === 'number') {
+        this.emit('backlight', msg.value);
+        return;
+      }
+      if (msg.type === 'move' && Number.isInteger(msg.from) && Number.isInteger(msg.to)) {
+        this.#pager?.move(msg.from as number, msg.to as number);
         return;
       }
       if (msg.type === 'page' && Number.isInteger(msg.index)) {

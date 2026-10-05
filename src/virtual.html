@@ -41,6 +41,50 @@
     gap: 10px;
   }
   .toolbar label { color: var(--text); }
+  .move-toggle {
+    padding: 7px 12px;
+    color: #eee;
+    font: inherit;
+    font-weight: 600;
+    background: var(--body);
+    border: 1px solid var(--body-edge);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .move-toggle:hover { border-color: #3f3f46; }
+  .move-toggle:focus-visible { outline: 2px solid var(--ok); outline-offset: 2px; }
+  .move-toggle[aria-pressed="true"] { color: #000; background: #e8901c; border-color: #e8901c; }
+  .move-hint { display: none; width: min(100%, 960px); color: var(--text); }
+  body.editing .move-hint { display: block; }
+  body.editing canvas { cursor: grab; outline: 1px dashed #52525b; outline-offset: 2px; }
+  body.editing canvas.fixed { cursor: not-allowed; opacity: 0.45; outline: none; }
+  body.editing canvas.drop-target { outline: 2px solid #e8901c; outline-offset: 2px; }
+  canvas.drag-source { opacity: 0.25; }
+  .drag-ghost {
+    position: fixed;
+    z-index: 10;
+    pointer-events: none;
+    border-radius: 12%;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.6);
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+  .backlight {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .backlight input {
+    width: clamp(90px, 22vw, 200px);
+    accent-color: #a8560a;
+    cursor: pointer;
+  }
+  .backlight output {
+    min-width: 3.5ch;
+    color: #eee;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
   select {
     appearance: none;
     min-width: 160px;
@@ -90,7 +134,14 @@
   <div class="toolbar">
     <label for="page">Page</label>
     <select id="page" disabled></select>
+    <button class="move-toggle" id="move-toggle" type="button" aria-pressed="false" disabled>Move buttons</button>
+    <div class="backlight">
+      <label for="backlight">Brightness</label>
+      <input id="backlight" type="range" min="0" max="100" step="1" value="70" disabled>
+      <output id="backlight-value" for="backlight">70%</output>
+    </div>
   </div>
+  <div class="move-hint" id="move-hint">Drag a button to a new spot. Dropping it on another button swaps them. The ▲ ▼ and page title keys stay put.</div>
   <div class="deck"><div class="keys" id="keys"></div></div>
   <div class="status" id="status"><span class="dot"></span><span id="status-text">connecting…</span></div>
 <script>
@@ -103,7 +154,35 @@ pageSelect.addEventListener('change', () => {
   pageSelect.blur();
 });
 
-function showPages(names, index) {
+// Brightness slider: sets the deck's backlight. Sends at most once per frame
+// while dragging, and ignores echoes from the server until the drag ends.
+const backlight = document.getElementById('backlight');
+const backlightValue = document.getElementById('backlight-value');
+let draggingBacklight = false;
+let backlightQueued = false;
+backlight.addEventListener('pointerdown', () => (draggingBacklight = true));
+addEventListener('pointerup', () => (draggingBacklight = false));
+backlight.addEventListener('input', () => {
+  backlightValue.textContent = `${backlight.value}%`;
+  if (backlightQueued) return;
+  backlightQueued = true;
+  requestAnimationFrame(() => {
+    backlightQueued = false;
+    ws?.readyState === 1 && ws.send(JSON.stringify({ type: 'backlight', value: Number(backlight.value) }));
+  });
+});
+
+function showBacklight(value) {
+  backlight.disabled = false;
+  if (draggingBacklight) return;
+  backlight.value = value;
+  backlightValue.textContent = `${value}%`;
+}
+
+function showPages(names, index, fixed = []) {
+  fixedKeys = new Set(fixed);
+  for (const [i, canvas] of canvases) canvas.classList.toggle('fixed', fixedKeys.has(i));
+  moveToggle.disabled = false;
   const current = [...pageSelect.options].map((o) => o.textContent);
   if (current.join('\n') !== names.join('\n')) {
     pageSelect.replaceChildren(...names.map((name, i) => new Option(name, String(i))));
@@ -129,23 +208,86 @@ function build(keys, keySize) {
     canvas.width = canvas.height = keySize;
     canvas.style.gridRow = key.row + 1;
     canvas.style.gridColumn = key.column + 1;
+    canvas.dataset.index = key.index;
+    canvas.classList.toggle('fixed', fixedKeys.has(key.index));
     const send = (type) => ws?.readyState === 1 && ws.send(JSON.stringify({ type, index: key.index }));
     canvas.addEventListener('pointerdown', (e) => {
       canvas.setPointerCapture(e.pointerId);
+      if (editing) return startDrag(canvas, e);
       canvas.classList.add('down');
       send('down');
     });
-    const release = () => {
+    canvas.addEventListener('pointermove', (e) => drag && moveDrag(e));
+    const release = (e) => {
+      if (drag) return endDrag(e);
       if (!canvas.classList.contains('down')) return;
       canvas.classList.remove('down');
       send('up');
     };
     canvas.addEventListener('pointerup', release);
-    canvas.addEventListener('pointercancel', release);
+    canvas.addEventListener('pointercancel', () => (drag ? cancelDrag() : release()));
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     keysEl.append(canvas);
     canvases.set(key.index, canvas);
   }
+}
+
+// Move mode: drag keys to rearrange them. Presses are off while it's on.
+const moveToggle = document.getElementById('move-toggle');
+let editing = false;
+let fixedKeys = new Set();
+let drag;
+
+moveToggle.addEventListener('click', () => {
+  editing = !editing;
+  moveToggle.setAttribute('aria-pressed', String(editing));
+  moveToggle.textContent = editing ? 'Done moving' : 'Move buttons';
+  document.body.classList.toggle('editing', editing);
+  if (!editing) cancelDrag();
+});
+addEventListener('keydown', (e) => e.key === 'Escape' && cancelDrag());
+
+function startDrag(canvas, e) {
+  if (canvas.classList.contains('fixed')) return;
+  const ghost = document.createElement('canvas');
+  ghost.className = 'drag-ghost';
+  ghost.width = canvas.width;
+  ghost.height = canvas.height;
+  ghost.getContext('2d').drawImage(canvas, 0, 0);
+  const size = canvas.getBoundingClientRect().width;
+  ghost.style.width = ghost.style.height = `${size}px`;
+  document.body.append(ghost);
+  canvas.classList.add('drag-source');
+  drag = { source: canvas, ghost, target: undefined };
+  moveDrag(e);
+}
+
+function moveDrag(e) {
+  drag.ghost.style.left = `${e.clientX}px`;
+  drag.ghost.style.top = `${e.clientY}px`;
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const target = under?.tagName === 'CANVAS' && under.dataset.index !== undefined && !under.classList.contains('fixed') && under !== drag.source ? under : undefined;
+  if (target === drag.target) return;
+  drag.target?.classList.remove('drop-target');
+  target?.classList.add('drop-target');
+  drag.target = target;
+}
+
+function endDrag(e) {
+  moveDrag(e);
+  const { source, target } = drag;
+  if (target && ws?.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'move', from: Number(source.dataset.index), to: Number(target.dataset.index) }));
+  }
+  cancelDrag();
+}
+
+function cancelDrag() {
+  if (!drag) return;
+  drag.ghost.remove();
+  drag.source.classList.remove('drag-source');
+  drag.target?.classList.remove('drop-target');
+  drag = undefined;
 }
 
 function setBrightness(percent) {
@@ -180,8 +322,10 @@ function connect() {
     if (msg.type === 'hello') {
       build(msg.keys, msg.keySize);
       setBrightness(msg.brightness);
+    } else if (msg.type === 'backlight') {
+      showBacklight(msg.value);
     } else if (msg.type === 'pages') {
-      showPages(msg.names, msg.index);
+      showPages(msg.names, msg.index, msg.fixed);
     } else if (msg.type === 'brightness') {
       setBrightness(msg.value);
     }
@@ -189,6 +333,9 @@ function connect() {
   ws.onclose = () => {
     statusEl.classList.remove('live');
     pageSelect.disabled = true;
+    backlight.disabled = true;
+    moveToggle.disabled = true;
+    cancelDrag();
     statusText.textContent = 'greendeck not running, retrying…';
     setTimeout(connect, 1000);
   };

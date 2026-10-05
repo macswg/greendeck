@@ -1,6 +1,6 @@
 import type { SKRSContext2D } from '@napi-rs/canvas';
 import { Widget } from '../widget.ts';
-import { colors, roundedFill, text } from '../draw.ts';
+import { colors, keyFace, text } from '../draw.ts';
 import type { Pager } from '../pages.ts';
 
 abstract class PagerWidget extends Widget {
@@ -21,7 +21,7 @@ abstract class PagerWidget extends Widget {
   }
 }
 
-/** ▲ previous page or ▼ next page (both wrap around). */
+/** ▲ next page or ▼ previous page (both wrap around). */
 export class PageArrow extends PagerWidget {
   #direction: 'up' | 'down';
 
@@ -31,12 +31,12 @@ export class PageArrow extends PagerWidget {
   }
 
   onDown(): void {
-    if (this.#direction === 'up') this.pager.prev();
-    else this.pager.next();
+    if (this.#direction === 'up') this.pager.next();
+    else this.pager.prev();
   }
 
   render(ctx: SKRSContext2D, s: number): void {
-    roundedFill(ctx, s, colors.bg);
+    keyFace(ctx, s, 'nav');
     const up = this.#direction === 'up';
     const h = s * 0.16;
     ctx.strokeStyle = this.pager.count > 1 ? colors.text : colors.dim;
@@ -58,7 +58,7 @@ export class PageTitle extends PagerWidget {
   }
 
   render(ctx: SKRSContext2D, s: number): void {
-    roundedFill(ctx, s, colors.bg);
+    keyFace(ctx, s, 'nav');
     text(ctx, this.pager.name.toUpperCase(), s / 2, s * 0.42, { size: 20, maxWidth: s - 14 });
 
     // One dot per page, the current one lit.
@@ -71,5 +71,36 @@ export class PageTitle extends PagerWidget {
       ctx.arc(x0 + i * gap, s * 0.72, i === this.pager.index ? 4 : 3, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+}
+
+/** Jumps to a named page. Navigation, so it uses the black nav face. */
+export class PageLink extends PagerWidget {
+  #page: string;
+  #label: string;
+
+  constructor(pager: Pager, page: string, label = page.toUpperCase()) {
+    super(pager);
+    this.#page = page;
+    this.#label = label;
+  }
+
+  onDown(): void {
+    this.pager.goTo(this.#page);
+  }
+
+  render(ctx: SKRSContext2D, s: number): void {
+    keyFace(ctx, s, 'nav');
+    text(ctx, this.#label, s / 2, s * 0.44, { size: 20, maxWidth: s - 14 });
+    // A small chevron to say "opens a page".
+    ctx.strokeStyle = colors.dim;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(s / 2 - 5, s * 0.66);
+    ctx.lineTo(s / 2 + 1, s * 0.72);
+    ctx.lineTo(s / 2 - 5, s * 0.78);
+    ctx.stroke();
   }
 }

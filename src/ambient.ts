@@ -1,4 +1,4 @@
-import { ColorPulse, type Background } from './background.ts';
+import { ColorChase, ColorPulse, Scanner, type Background } from './background.ts';
 import type { PushHub } from './push.ts';
 
 interface State {
@@ -15,7 +15,7 @@ interface State {
  *
  * Other programs can drive it over the push port:
  *
- *   bg.<name> <#rrggbb> [pulse seconds, 0 = steady] [priority]
+ *   bg.<name> <#rrggbb> [pulse seconds, 0 = steady, "chase" or "scanner"] [priority]
  *   bg.<name> off
  */
 export class Ambient {
@@ -33,7 +33,13 @@ export class Ambient {
         return;
       }
       try {
-        this.set(name, new ColorPulse(color, { period: period ? Number(period) : undefined }), Number(priority) || 0);
+        const background =
+          period === 'chase'
+            ? new ColorChase(color)
+            : period === 'scanner'
+              ? new Scanner(color)
+              : new ColorPulse(color, { period: period ? Number(period) : undefined });
+        this.set(name, background, Number(priority) || 0);
       } catch (err) {
         console.error(`bg.${name}:`, (err as Error).message);
       }

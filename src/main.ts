@@ -7,6 +7,10 @@ import { VirtualDeck } from './virtual.ts';
 const PUSH_PORT = Number(process.env.GREENDECK_PUSH_PORT ?? 9900);
 const MAX_FPS = Number(process.env.GREENDECK_MAX_FPS ?? 60);
 const BRIGHTNESS = Number(process.env.GREENDECK_BRIGHTNESS ?? 70);
+// Key image quality sent to the deck. Higher keeps more of the background
+// dither (lower smooths it away and the glow bands) but sends larger images:
+// with a pulsing background, 95 runs ~16 fps, 97 ~13, 100 only ~7.
+const JPEG_QUALITY = Number(process.env.GREENDECK_JPEG_QUALITY ?? 97);
 // Set GREENDECK_VIRTUAL_PORT=0 to turn the browser deck off. It only listens on
 // this machine unless GREENDECK_VIRTUAL_HOST opens it up (e.g. 0.0.0.0 for a
 // phone on the LAN; anyone who can reach it can press buttons).
@@ -16,7 +20,7 @@ const VIRTUAL_FPS = Number(process.env.GREENDECK_VIRTUAL_FPS ?? 30);
 
 const push = new PushHub();
 push.listen(PUSH_PORT);
-const services = createServices(push);
+const services = createServices(push, { brightness: BRIGHTNESS });
 
 if (VIRTUAL_PORT) startVirtualDeck();
 
@@ -33,6 +37,10 @@ function startVirtualDeck(): void {
     void engine?.stop();
     engine = undefined;
   });
+  // The page's slider sets the shared backlight level (the hardware follows).
+  deck.on('backlight', (percent: number) => services.brightness.set(percent));
+  services.brightness.subscribe(() => deck.showBacklight(services.brightness.value));
+  deck.showBacklight(services.brightness.value);
   deck.listen(VIRTUAL_PORT, VIRTUAL_HOST);
 }
 
@@ -64,7 +72,7 @@ async function run(): Promise<never> {
 
     let deck: StreamDeck;
     try {
-      deck = await openStreamDeck(info.path);
+      deck = await openStreamDeck(info.path, { jpegOptions: { quality: JPEG_QUALITY } });
     } catch (err) {
       console.error(`couldn't open ${info.modelInfo.name} (is Companion or the Elgato app running?):`, (err as Error).message);
       await sleep(3000);

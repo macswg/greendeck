@@ -33,11 +33,42 @@ export function text(
   ctx.fillText(str, x, y);
 }
 
+/** How opaque a solid (lit) key face is, so background states still show through. */
+const LIT_ALPHA = 0.8;
+
+/**
+ * A key's face. Faces are never fully opaque: solid colours (lit keys) are
+ * drawn at LIT_ALPHA, and rgba() colours keep their own alpha.
+ */
 export function roundedFill(ctx: SKRSContext2D, size: number, color: string, inset = 4, radius = 12): void {
+  ctx.save();
+  if (!color.startsWith('rgba')) ctx.globalAlpha = LIT_ALPHA;
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.roundRect(inset, inset, size - inset * 2, size - inset * 2, radius);
   ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Button roles, so a key's colour says what kind of button it is:
+ *   nav      black: page arrows, page title, sleep/wake
+ *   action   red: record, take, anything with consequences outside greendeck
+ *            (black at rest, solid red only while live)
+ *   default  green: a button sitting in its default state
+ * `idle` is the face at rest, `on` the face when active.
+ */
+export type Role = 'nav' | 'action' | 'default';
+
+export const roles: Record<Role, { idle: string; on: string }> = {
+  nav: { idle: colors.bg, on: '#3a3a3a' },
+  action: { idle: colors.bg, on: colors.error },
+  default: { idle: 'rgba(10, 46, 25, 0.55)', on: colors.active },
+};
+
+/** A key face in its role's colours: `idle` at rest, `on` when active. */
+export function keyFace(ctx: SKRSContext2D, size: number, role: Role, on = false): void {
+  roundedFill(ctx, size, on ? roles[role].on : roles[role].idle);
 }
 
 /** Filled sparkline of values in [min, max] across the given box. */
