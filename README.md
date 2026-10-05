@@ -48,6 +48,9 @@ npm install
 npm start
 ```
 
+Or double-click `start-greendeck.command` in Finder (it restarts greendeck if it's
+already running), and `stop-greendeck.command` to stop it.
+
 Edit `src/layout.ts` to change what goes on each key.
 
 | Env var | Default | |
