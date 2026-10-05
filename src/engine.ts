@@ -20,6 +20,12 @@ export interface Surface {
  */
 const BG_BATCH = 8;
 
+/**
+ * One clock for every engine's backgrounds, so the hardware deck and the
+ * browser deck animate in step (and a background drawn by both sees one time).
+ */
+const EPOCH = performance.now();
+
 /** Background canvas resolution relative to the panel; it's scaled up smoothly. */
 const BG_SCALE = 1 / 4;
 
@@ -83,7 +89,6 @@ export class Engine {
   #bgKeys: KeyRect[];
   #background: Background | undefined;
   #bgCanvas: Canvas;
-  #startedAt = performance.now();
   #standby = false;
   #onStop: (() => void)[] = [];
   #standbyWidgets = new Map<number, Widget>();
@@ -279,7 +284,7 @@ export class Engine {
     const bg = this.#standby ? undefined : this.#background;
     const bgDue = !!bg && (this.#bgStale || (bg.animated && start - this.#lastBgAt >= this.#bgInterval * 0.9));
     if (bg && bgDue) {
-      bg.render(this.#bgCanvas, (start - this.#startedAt) / 1000, this.#bgKeys);
+      bg.render(this.#bgCanvas, (start - EPOCH) / 1000, this.#bgKeys);
       this.#lastBgAt = start;
       this.#bgStale = false;
     }

@@ -2,6 +2,7 @@ import { Ambient } from './ambient.ts';
 import { Attention } from './attention.ts';
 import { Scanner } from './background.ts';
 import { Brightness } from './brightness.ts';
+import { SharedStandby } from './sleep.ts';
 import { ClaudeSessions } from './claude.ts';
 import { FanControl } from './fans.ts';
 import { SystemStats } from './system.ts';
@@ -63,6 +64,7 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   });
 
   const brightness = new Brightness(opts.brightness);
+  const standby = new SharedStandby();
   const system = new SystemStats();
   system.start();
   const fans = new FanControl();
@@ -72,7 +74,7 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   const positions = new Positions(new URL('../layout.local.json', import.meta.url).pathname);
   const local = loadLocalConfig();
 
-  return { push, mon1, mon2, td, ambient, attention, claude, brightness, system, fans, positions, local };
+  return { push, mon1, mon2, td, ambient, attention, claude, brightness, standby, system, fans, positions, local };
 }
 
 export type Services = ReturnType<typeof createServices>;
@@ -112,7 +114,7 @@ export type Services = ReturnType<typeof createServices>;
  *   │ stats│      │      │      │      │      │      │      │
  *   └──────┴──────┴──── ……… ────┴──────┴──────┴──────┴──────┘
  */
-export function layout(engine: Engine, { push, mon1, mon2, td, ambient, claude, brightness, system, fans, positions, local }: Services): Pager {
+export function layout(engine: Engine, { push, mon1, mon2, td, ambient, claude, brightness, standby, system, fans, positions, local }: Services): Pager {
   const key = (row: number, col: number) => row * 8 + col;
 
   engine.setBrightness(brightness.value);
@@ -121,7 +123,10 @@ export function layout(engine: Engine, { push, mon1, mon2, td, ambient, claude, 
   const showAmbient = () => engine.setBackground(ambient.current);
   showAmbient();
   engine.onStop(ambient.subscribe(showAmbient));
-  engine.mountStandby(key(3, 1), new WakeButton(engine));
+  // Standby is shared: every surface sleeps and wakes together.
+  engine.setStandby(standby.on);
+  engine.onStop(standby.subscribe(() => engine.setStandby(standby.on)));
+  engine.mountStandby(key(3, 1), new WakeButton(standby));
 
   const pager = new Pager(engine, positions);
   pager.fixed(key(2, 7), new PageArrow(pager, 'up'));
@@ -160,9 +165,9 @@ export function layout(engine: Engine, { push, mon1, mon2, td, ambient, claude, 
     put(key(2, 0), new RecordButton(td, 'record', { label: 'REC' }));
     put(key(2, 1), new TdToggle(td, 'cacherecord', { label: 'CACHE' }));
 
-    put(key(3, 0), new SleepButton(engine));
+    put(key(3, 0), new SleepButton(standby));
     put(key(3, 1), new Clock());
-    put(key(3, 5), new LinkButton({ url: 'http://localhost:9902/' }, { label: 'WEB DECK' }));
+    put(key(3, 5), new LinkButton({ url: 'http://localhost:9902/' }, { label: 'WEB DECK', icon: 'http://localhost:9902/favicon.svg' }));
   });
 
   // Individual input switching for each monitor.

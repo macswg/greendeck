@@ -1,16 +1,19 @@
 import type { SKRSContext2D } from '@napi-rs/canvas';
 import { Widget } from '../widget.ts';
 import { colors, keyFace, text } from '../draw.ts';
-import type { Engine } from '../engine.ts';
+/** Anything that can go to sleep: one engine, or the shared standby for all of them. */
+interface Sleeper {
+  setStandby(on: boolean): void;
+}
 import { drawHoldBar, Hold } from '../hold.ts';
 
 /** Puts the deck into standby after a 1 s hold, so a stray tap can't. */
 export class SleepButton extends Widget {
   #hold: Hold;
 
-  constructor(engine: Engine) {
+  constructor(target: Sleeper) {
     super();
-    this.#hold = new Hold(1000, () => engine.setStandby(true), () => this.invalidate());
+    this.#hold = new Hold(1000, () => target.setStandby(true), () => this.invalidate());
   }
 
   onDown(): void {
@@ -53,15 +56,15 @@ export class SleepButton extends Widget {
 
 /** Shown in standby, and the only key that responds there: wakes the deck. */
 export class WakeButton extends Widget {
-  #engine: Engine;
+  #target: Sleeper;
 
-  constructor(engine: Engine) {
+  constructor(target: Sleeper) {
     super();
-    this.#engine = engine;
+    this.#target = target;
   }
 
   onDown(): void {
-    this.#engine.setStandby(false);
+    this.#target.setStandby(false);
   }
 
   render(ctx: SKRSContext2D, s: number): void {

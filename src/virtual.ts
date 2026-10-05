@@ -5,6 +5,7 @@ import jpeg from '@julusian/jpeg-turbo';
 import { DeviceModelId, getModelInfo, type StreamDeckControlDefinition } from '@elgato-stream-deck/node';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { Surface } from './engine.ts';
+import { ICON_SVG, iconPng } from './icon.ts';
 import type { Pager } from './pages.ts';
 
 /** Stop queueing frames to a client once this much is waiting to be sent. */
@@ -36,8 +37,12 @@ export class VirtualDeck extends EventEmitter implements Surface {
   #backlight = 70;
   #unsubscribePager: (() => void) | undefined;
 
-  constructor(model: DeviceModelId = DeviceModelId.XL) {
+  readonly #version: string;
+
+  constructor(opts: { model?: DeviceModelId; version?: string } = {}) {
     super();
+    const model = opts.model ?? DeviceModelId.XL;
+    this.#version = opts.version ?? '';
     const info = getModelInfo(model);
     if (!info) throw new Error(`unknown Stream Deck model: ${model}`);
     this.CONTROLS = info.controls;
@@ -47,8 +52,17 @@ export class VirtualDeck extends EventEmitter implements Surface {
 
   listen(port: number, host: string): void {
     const page = new URL('./virtual.html', import.meta.url);
+    let touchIcon: Buffer | undefined;
     const server = createServer(async (req, res) => {
-      if (req.url !== '/') {
+      if (req.url === '/favicon.svg') {
+        res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'max-age=86400' }).end(ICON_SVG);
+        return;
+      }
+      if (req.url === '/apple-touch-icon.png') {
+        res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'max-age=86400' }).end((touchIcon ??= iconPng()));
+        return;
+      }
+      if (req.url !== '/' && !req.url?.startsWith('/?')) {
         res.writeHead(404).end();
         return;
       }
@@ -111,7 +125,7 @@ export class VirtualDeck extends EventEmitter implements Surface {
     this.#clients.add(client);
 
     const keys = this.CONTROLS.flatMap((c) => (c.type === 'button' ? [{ index: c.index, row: c.row, column: c.column }] : []));
-    ws.send(JSON.stringify({ type: 'hello', keySize: this.#keySize, keys, brightness: this.#brightness }));
+    ws.send(JSON.stringify({ type: 'hello', keySize: this.#keySize, keys, brightness: this.#brightness, version: this.#version }));
     if (this.#pager) ws.send(JSON.stringify(this.#pagesMessage()));
     ws.send(JSON.stringify({ type: 'backlight', value: this.#backlight }));
     for (const [index, image] of this.#images) this.#queue(client, index, image);

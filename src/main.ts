@@ -3,6 +3,7 @@ import { Engine } from './engine.ts';
 import { createServices, layout } from './layout.ts';
 import { PushHub } from './push.ts';
 import { VirtualDeck } from './virtual.ts';
+import { versionString } from './version.ts';
 
 const PUSH_PORT = Number(process.env.GREENDECK_PUSH_PORT ?? 9900);
 const MAX_FPS = Number(process.env.GREENDECK_MAX_FPS ?? 60);
@@ -26,7 +27,7 @@ if (VIRTUAL_PORT) startVirtualDeck();
 
 /** The browser deck gets its own engine, running only while a page is open. */
 function startVirtualDeck(): void {
-  const deck = new VirtualDeck();
+  const deck = new VirtualDeck({ version: versionString() });
   let engine: Engine | undefined;
   deck.on('connect', () => {
     engine = new Engine(deck, { maxFps: VIRTUAL_FPS, brightness: BRIGHTNESS });

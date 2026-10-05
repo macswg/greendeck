@@ -184,7 +184,7 @@ export class EndOfDayButton extends Widget {
     const label = this.#offline
       ? 'OFFLINE'
       : message ??
-        (this.#starting ? 'STARTING' : state === 'running' ? 'RUNNING' : state === 'done' ? 'DONE' : state === 'failed' ? 'FAILED' : 'END OF DAY');
+        (this.#starting ? 'STARTING' : state === 'running' ? 'RUNNING' : state === 'done' ? 'DONE' : state === 'failed' ? 'FAILED' : 'EOD');
     text(ctx, label, s / 2, s * 0.64, { size: 14, maxWidth: s - 10 });
     const sub = this.#offline ? 'tap to open' : this.#needsReview ? 'check page' : state === 'running' ? 'in progress' : 'hold to run';
     text(ctx, sub, s / 2, s * 0.82, { size: 10, maxWidth: s - 10, weight: 'normal', color: colors.dim });

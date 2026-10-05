@@ -246,9 +246,12 @@ export class Scanner implements Background {
   #columns: number;
   #row: number;
   #decay: number;
-  #levels: Float32Array;
-  #lastT: number | undefined;
-  #startT: number | undefined;
+  /**
+   * Afterglow per canvas: the hardware and browser decks each draw this same
+   * scanner, so each keeps its own fading levels rather than sharing (and
+   * scrambling) one set.
+   */
+  #glow = new WeakMap<Canvas, { levels: Float32Array; lastT: number; startT: number }>();
 
   constructor(color: string, opts: {
     /** Seconds for one sweep across and back. */
@@ -264,7 +267,6 @@ export class Scanner implements Background {
     this.#columns = opts.columns ?? 8;
     this.#row = opts.row ?? 0;
     this.#decay = opts.decay ?? 0.22;
-    this.#levels = new Float32Array(this.#columns);
   }
 
   /** Seconds for one sweep across and back. */
@@ -276,18 +278,23 @@ export class Scanner implements Background {
     const { width: w, height: h } = canvas;
     const ctx = canvas.getContext('2d');
     const n = this.#columns;
-    const dt = this.#lastT === undefined ? 0 : Math.max(0, t - this.#lastT);
-    this.#lastT = t;
-    // Sweeps start from the left whenever this scanner first shows.
-    this.#startT ??= t;
+    let glow = this.#glow.get(canvas);
+    if (!glow) {
+      // Sweeps start from the left whenever this scanner first shows.
+      glow = { levels: new Float32Array(n), lastT: t, startT: t };
+      this.#glow.set(canvas, glow);
+    }
+    const dt = Math.max(0, t - glow.lastT);
+    glow.lastT = t;
+    const levels = glow.levels;
 
     // Head position bounces 0 → n-1 → 0 (a triangle wave).
-    const phase = fract((t - this.#startT) / this.#period) * 2;
+    const phase = fract((t - glow.startT) / this.#period) * 2;
     const head = (phase < 1 ? phase : 2 - phase) * (n - 1);
     const fade = Math.exp(-dt / this.#decay);
     for (let c = 0; c < n; c++) {
       const lit = Math.max(0, 1 - Math.abs(head - c));
-      this.#levels[c] = Math.max(this.#levels[c] * fade, lit);
+      levels[c] = Math.max(levels[c] * fade, lit);
     }
 
     ctx.fillStyle = '#000';
@@ -296,7 +303,7 @@ export class Scanner implements Background {
     for (const key of keys) {
       if (key.row !== this.#row || key.column >= n) continue;
       // A few levels only, so a key that's fully faded stays identical.
-      const k = Math.round(this.#levels[key.column] * 20) / 20;
+      const k = Math.round(levels[key.column] * 20) / 20;
       if (!k) continue;
       ctx.fillStyle = `rgb(${r * k}, ${g * k}, ${b * k})`;
       fillKey(ctx, key);
