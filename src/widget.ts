@@ -28,4 +28,6 @@ export abstract class Widget {
   unmount?(): void;
   onDown?(): void;
   onUp?(): void;
+  /** Called once this key's new image has been handed to the deck (not when unchanged). */
+  onSent?(): void;
 }

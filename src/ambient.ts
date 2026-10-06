@@ -57,6 +57,11 @@ export class Ambient {
     if (this.#states.delete(name)) this.#notify();
   }
 
+  /** The background set under `name`, if that state is active. */
+  get(name: string): Background | undefined {
+    return this.#states.get(name)?.background;
+  }
+
   get current(): Background | undefined {
     let best: State | undefined;
     for (const s of this.#states.values()) {

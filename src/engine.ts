@@ -85,6 +85,8 @@ export class Engine {
   #keysSent = 0;
   #statsTimer: NodeJS.Timeout;
   #onStats = new Set<() => void>();
+  /** The whole panel's size in key pixels, gaps included. */
+  #panel: { w: number; h: number };
   #keys: { index: number; row: number; column: number; x: number; y: number; w: number; h: number }[];
   #bgKeys: KeyRect[];
   #background: Background | undefined;
@@ -131,6 +133,7 @@ export class Engine {
     }));
     const panelW = Math.max(...this.#keys.map((k) => k.x + k.w));
     const panelH = Math.max(...this.#keys.map((k) => k.y + k.h));
+    this.#panel = { w: panelW, h: panelH };
     this.#bgCanvas = createCanvas(Math.ceil(panelW * BG_SCALE), Math.ceil(panelH * BG_SCALE));
 
     this.#statsTimer = setInterval(() => {
@@ -282,9 +285,12 @@ export class Engine {
     // Redraw the background when it's due; keys changing between background
     // frames reuse the last one.
     const bg = this.#standby ? undefined : this.#background;
-    const bgDue = !!bg && (this.#bgStale || (bg.animated && start - this.#lastBgAt >= this.#bgInterval * 0.9));
+    let bgDue = !!bg && (this.#bgStale || (bg.animated && start - this.#lastBgAt >= this.#bgInterval * 0.9));
     if (bg && bgDue) {
-      bg.render(this.#bgCanvas, (start - EPOCH) / 1000, this.#bgKeys);
+      // A background that reports no change skips re-sending the deck, unless
+      // the canvas is stale (it was swapped in, or something else drew there).
+      const changed = bg.render(this.#bgCanvas, (start - EPOCH) / 1000, this.#bgKeys) !== false;
+      bgDue = changed || this.#bgStale;
       this.#lastBgAt = start;
       this.#bgStale = false;
     }
@@ -322,7 +328,9 @@ export class Engine {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, this.size, this.size);
     const key = background && this.#keys.find((k) => k.index === index);
-    if (key) {
+    if (key && background.drawKey) {
+      background.drawKey(ctx, key, this.size, this.#panel);
+    } else if (key) {
       ctx.drawImage(this.#bgCanvas, key.x * BG_SCALE, key.y * BG_SCALE, key.w * BG_SCALE, key.h * BG_SCALE, 0, 0, this.size, this.size);
     }
     widget?.render(ctx, this.size);
@@ -336,6 +344,7 @@ export class Engine {
 
     await this.#deck.fillKeyBuffer(index, pixels, { format: 'rgba' });
     this.#keysSent++;
+    widget?.onSent?.();
   }
 }
 

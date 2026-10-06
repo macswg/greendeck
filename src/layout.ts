@@ -7,19 +7,24 @@ import { ClaudeSessions } from './claude.ts';
 import { FanControl } from './fans.ts';
 import { SystemStats } from './system.ts';
 import type { Engine } from './engine.ts';
+import { MicLevel } from './mic.ts';
 import { Pager } from './pages.ts';
 import { Positions } from './positions.ts';
 import { loadLocalConfig } from './config.ts';
 import type { Widget } from './widget.ts';
 import type { PushHub } from './push.ts';
 import { TouchDesigner } from './td.ts';
+import { Wallpaper, WALLPAPERS } from './wallpaper.ts';
 import { ClaudeKey, ClaudeSlot } from './widgets/claude.ts';
 import { EndOfDayButton } from './widgets/endofday.ts';
+import { LatencyTester } from './widgets/latency.ts';
 import { LinkButton } from './widgets/link.ts';
+import { MicGainButton, MicMeterSegment, MicReadout } from './widgets/mic.ts';
 import { PageArrow, PageLink, PageTitle } from './widgets/nav.ts';
 import { Monitor, MonitorHeader, MonitorInputButton } from './widgets/monitor.ts';
 import { Clock, EngineStatsWidget, FanKey, LoadKey, PushValue, TempKey } from './widgets/realtime.ts';
 import { SleepButton, WakeButton } from './widgets/standby.ts';
+import { WallpaperButton } from './widgets/wallpaper.ts';
 import { RecordButton, TdToggle } from './widgets/td.ts';
 
 /**
@@ -36,6 +41,8 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   // Background states, highest priority wins. Claude waiting on you is the
   // first; more (recording, alerts, ...) go here.
   const ambient = new Ambient(push);
+  // The resting background under every state; picked from keys on Main.
+  const wallpaper = new Wallpaper(ambient);
   const claude = new ClaudeSessions(push);
   // When something needs you, a red KITT-style scanner sweeps the top row for
   // a few seconds, then rests for 2 minutes, repeating while it's still
@@ -69,12 +76,14 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   system.start();
   const fans = new FanControl();
   fans.start();
+  // Only listens while a meter is on screen.
+  const mic = new MicLevel();
   // Where buttons have been moved to (from the browser deck). Local to this
   // machine and git-ignored; delete it to reset.
   const positions = new Positions(new URL('../layout.local.json', import.meta.url).pathname);
   const local = loadLocalConfig();
 
-  return { push, mon1, mon2, td, ambient, attention, claude, brightness, standby, system, fans, positions, local };
+  return { push, mon1, mon2, td, ambient, wallpaper, attention, claude, brightness, standby, system, fans, mic, positions, local };
 }
 
 export type Services = ReturnType<typeof createServices>;
@@ -86,7 +95,7 @@ export type Services = ReturnType<typeof createServices>;
  *
  *   Main
  *   ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
- *   │preset│preset│ ...  │      │CLAUDE│ FANS │ TEMP │ LOAD │
+ *   │      │      │      │      │CLAUDE│ FANS │ TEMP │ LOAD │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
  *   │      │      │      │      │ link*│ EOD* │      │ MON ›│
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
@@ -97,6 +106,12 @@ export type Services = ReturnType<typeof createServices>;
  *   * In standby the clock's key shows WAKE instead, the only lit key.
  *   link*, EOD* and other personal buttons come from greendeck.local.json.
  *   Presets (top left) switch several monitors at once; none defined yet.
+ *
+ *   Themes
+ *   ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+ *   │RAINBO│ EMBER│ OCEAN│ DUSK │CIRCUI│ GRID │ HEX  │ NEON │
+ *   └──────┴──────┴──── ……… ────┴──────┴──────┴──────┴──────┘
+ *   Wallpapers: press one to show it, the lit one again for black.
  *
  *   Monitors (MON › opens it)
  *   ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
@@ -111,10 +126,16 @@ export type Services = ReturnType<typeof createServices>;
  *   ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
  *   │push a│push b│      │      │      │      │      │      │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
- *   │ stats│      │      │      │      │      │      │      │
- *   └──────┴──────┴──── ……… ────┴──────┴──────┴──────┴──────┘
+ *   │ stats│ LAT  │      │      │      │      │      │      │
+ *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+ *   │  MIC │ ◼◼◼◼◼◼◼◼◼◼◼◼◼◼ level meter ◼◼◼◼◼◼◼◼◼◼◼ │  ▲   │
+ *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+ *   │GAIN −│GAIN +│      │      │      │      │ title│  ▼   │
+ *   └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+ *   LAT: press to time how fast the deck answers. The mic only listens while
+ *   this page is showing.
  */
-export function layout(engine: Engine, { push, mon1, mon2, td, ambient, claude, brightness, standby, system, fans, positions, local }: Services): Pager {
+export function layout(engine: Engine, { push, mon1, mon2, td, ambient, wallpaper, claude, brightness, standby, system, fans, mic, positions, local }: Services): Pager {
   const key = (row: number, col: number) => row * 8 + col;
 
   engine.setBrightness(brightness.value);
@@ -170,6 +191,11 @@ export function layout(engine: Engine, { push, mon1, mon2, td, ambient, claude, 
     put(key(3, 5), new LinkButton({ url: 'http://localhost:9902/' }, { label: 'WEB DECK', icon: 'http://localhost:9902/favicon.svg' }));
   });
 
+  // Wallpapers to pick from, eight to a row.
+  page('Themes', (put) => {
+    WALLPAPERS.forEach((choice, i) => put(key(Math.floor(i / 8), i % 8), new WallpaperButton(wallpaper, choice)));
+  });
+
   // Individual input switching for each monitor.
   page('Monitors', (put) => {
     for (const [row, mon] of [[0, mon1], [1, mon2]] as const) {
@@ -191,6 +217,12 @@ export function layout(engine: Engine, { push, mon1, mon2, td, ambient, claude, 
     put(key(0, 0), new PushValue(push, 'a'));
     put(key(0, 1), new PushValue(push, 'b'));
     put(key(1, 0), new EngineStatsWidget(engine));
+    put(key(1, 1), new LatencyTester());
+    put(key(2, 0), new MicReadout(mic));
+    const METER = 6;
+    for (let i = 0; i < METER; i++) put(key(2, 1 + i), new MicMeterSegment(mic, i, METER));
+    put(key(3, 0), new MicGainButton(mic, -1));
+    put(key(3, 1), new MicGainButton(mic, 1));
   });
 
   return pager;
