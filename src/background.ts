@@ -325,51 +325,79 @@ export class HexField implements Background {
 }
 
 /**
- * An 80s laser scan over another background: a bright magenta line with a
- * glow and a fading trail sweeps from the top of the panel to the bottom,
- * then rests before the next pass. Drawn over each key at full resolution;
- * only the row of keys it's crossing changes, and nothing at all while it
- * rests.
+ * An effect drawn over another background, key by key at full resolution.
+ * Subclasses say what this frame looks like (a short string; same string,
+ * same picture) and draw it over a key; the layer works out whether anything
+ * changed, so frames where neither the effect nor what's under it moved
+ * aren't re-sent. Layers stack: a layer can go over another layer.
  */
-export class LaserSweep implements Background {
+export abstract class Layer implements Background {
   readonly animated = true;
-  readonly fps = 15;
-  #under: Background;
-  #sweep: number;
-  #rest: number;
-  /** The line's height as a 0–1 share of the panel, or undefined while resting. */
-  #at: number | undefined;
+  readonly fps: number;
+  protected readonly under: Background;
   #lastKey = new WeakMap<Canvas, string>();
   #underDrawn = new WeakSet<Canvas>();
 
-  /** Where the scan starts, as a 0–1 share of the panel's height. */
-  #from: number;
-
-  constructor(under: Background, opts: { sweep?: number; rest?: number; from?: number } = {}) {
-    this.#under = under;
-    this.#sweep = opts.sweep ?? 3;
-    this.#rest = opts.rest ?? 4;
-    this.#from = opts.from ?? 0;
+  constructor(under: Background, fps: number) {
+    this.under = under;
+    // Never slower than what's underneath.
+    this.fps = Math.max(fps, under.fps ?? 0);
   }
+
+  /** Work out this frame of the effect; return a string that changes when its look does. */
+  protected abstract update(t: number): string;
+  /** Draw the effect over a key that already has what's underneath on it. */
+  protected abstract paint(ctx: SKRSContext2D, key: KeyRect, size: number, panel: { w: number; h: number }): void;
 
   render(canvas: Canvas, t: number, keys: readonly KeyRect[]): boolean {
     // A still picture underneath only needs drawing once per canvas.
     let underChanged = false;
-    if (this.#under.animated || !this.#underDrawn.has(canvas)) {
-      underChanged = this.#under.render(canvas, t, keys) !== false;
+    if (this.under.animated || !this.#underDrawn.has(canvas)) {
+      underChanged = this.under.render(canvas, t, keys) !== false;
       this.#underDrawn.add(canvas);
     }
-    const into = t % (this.#sweep + this.#rest);
-    this.#at = into < this.#sweep ? into / this.#sweep : undefined;
-    // In panel pixels, roughly: the trail runs a little past the bottom.
-    const key = this.#at === undefined ? '' : String(Math.round(this.#at * 600));
+    const key = this.update(t);
     const changed = this.#lastKey.get(canvas) !== key;
     this.#lastKey.set(canvas, key);
     return changed || underChanged;
   }
 
   drawKey(ctx: SKRSContext2D, key: KeyRect, size: number, panel: { w: number; h: number }): void {
-    if (this.#under.drawKey) this.#under.drawKey(ctx, key, size, panel);
+    this.under.drawKey?.(ctx, key, size, panel);
+    ctx.save();
+    this.paint(ctx, key, size, panel);
+    ctx.restore();
+  }
+}
+
+/**
+ * An 80s laser scan: a bright magenta line with a glow and a fading trail
+ * sweeps from a start line down to the bottom of the panel, then rests
+ * before the next pass. Only the row of keys it's crossing changes, and
+ * nothing at all while it rests.
+ */
+export class LaserSweep extends Layer {
+  #sweep: number;
+  #rest: number;
+  /** Where the scan starts, as a 0–1 share of the panel's height. */
+  #from: number;
+  /** The line's progress 0–1, or undefined while resting. */
+  #at: number | undefined;
+
+  constructor(under: Background, opts: { sweep?: number; rest?: number; from?: number } = {}) {
+    super(under, 15);
+    this.#sweep = opts.sweep ?? 3;
+    this.#rest = opts.rest ?? 4;
+    this.#from = opts.from ?? 0;
+  }
+
+  protected update(t: number): string {
+    const into = t % (this.#sweep + this.#rest);
+    this.#at = into < this.#sweep ? into / this.#sweep : undefined;
+    return this.#at === undefined ? '' : String(Math.round(this.#at * 600));
+  }
+
+  protected paint(ctx: SKRSContext2D, key: KeyRect, size: number, panel: { w: number; h: number }): void {
     if (this.#at === undefined) return;
     const TRAIL = 70;
     const GLOW = 10;
@@ -380,7 +408,6 @@ export class LaserSweep implements Background {
     if (y + GLOW < key.y || y - TRAIL > key.y + key.h || key.y + key.h < top) return;
     const scale = size / key.h;
     const ky = (y - key.y) * scale;
-    ctx.save();
     const clipTop = Math.max(0, (top - key.y) * scale);
     ctx.beginPath();
     ctx.rect(0, clipTop, size, size - clipTop);
@@ -402,7 +429,6 @@ export class LaserSweep implements Background {
     // The hot core.
     ctx.fillStyle = 'rgba(255, 230, 255, 0.95)';
     ctx.fillRect(0, ky - 1, size, 2);
-    ctx.restore();
   }
 }
 
