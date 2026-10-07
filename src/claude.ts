@@ -11,6 +11,8 @@ export interface ClaudeSession {
   terminal: string;
   /** iTerm's session id, or '-'. */
   terminalSession: string;
+  /** The claude process, or 0 when the hook couldn't find it. */
+  pid: number;
   cwd: string;
   project: string;
   /** When it entered its current state. */
@@ -18,8 +20,10 @@ export interface ClaudeSession {
   lastSeen: number;
 }
 
-/** Sessions that never reported ending (e.g. a killed terminal) drop off after this. */
+/** Sessions that never reported ending and have no pid to check drop off after this. */
 const STALE_MS = 24 * 60 * 60 * 1000;
+/** How often to check for sessions whose claude process has gone. */
+const SWEEP_MS = 15_000;
 /** Presses this close together step to the next session instead of starting over. */
 const CYCLE_MS = 10_000;
 
@@ -40,7 +44,7 @@ export class ClaudeSessions {
       if (!id.startsWith('claude.')) return;
       this.#update(id.slice(7), value);
     });
-    setInterval(() => this.#sweep(), 60 * 60 * 1000).unref();
+    setInterval(() => this.#sweep(), SWEEP_MS).unref();
   }
 
   /** Every session: waiting (longest first), then working, then idle. */
@@ -59,6 +63,7 @@ export class ClaudeSessions {
 
   /** Bring a session's own terminal tab to the front. */
   focus(session: ClaudeSession): void {
+    if (!alive(session)) return this.#sweep();
     void focusTerminal({ ...session, waiting: session.state === 'waiting' });
   }
 
@@ -67,6 +72,7 @@ export class ClaudeSessions {
    * steps through the rest. With nothing waiting, steps through all sessions.
    */
   focusNext(): void {
+    this.#sweep();
     const list = this.waiting.length ? this.waiting : this.all;
     if (!list.length) return;
     const now = Date.now();
@@ -81,7 +87,7 @@ export class ClaudeSessions {
   }
 
   #update(id: string, value: string): void {
-    const [state, terminal = '-', terminalSession = '-', ...cwdParts] = value.split(' ');
+    const [state, terminal = '-', terminalSession = '-', pid = '-', ...cwdParts] = value.split(' ');
     const cwd = cwdParts.join(' ');
     const now = Date.now();
     if (state === 'ended') {
@@ -93,6 +99,7 @@ export class ClaudeSessions {
         state,
         terminal,
         terminalSession,
+        pid: Number(pid) || 0,
         cwd,
         project: cwd && cwd !== '-' ? basename(cwd) : '',
         since: prev?.state === state ? prev.since : now,
@@ -105,12 +112,25 @@ export class ClaudeSessions {
     for (const fn of this.#listeners) fn();
   }
 
+  /** Drop sessions whose claude process is gone, or that went quiet a day ago. */
   #sweep(): void {
     const cutoff = Date.now() - STALE_MS;
     let changed = false;
     for (const [id, s] of this.sessions) {
-      if (s.lastSeen < cutoff) changed = this.sessions.delete(id) || changed;
+      if (!alive(s) || s.lastSeen < cutoff) changed = this.sessions.delete(id) || changed;
     }
     if (changed) for (const fn of this.#listeners) fn();
+  }
+}
+
+/** Whether the session's claude process is still running (true when its pid is unknown). */
+function alive({ pid }: ClaudeSession): boolean {
+  if (!pid) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM means it exists but isn't ours to signal.
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
