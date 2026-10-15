@@ -24,5 +24,10 @@
     "sdi": { "ip": "192.0.2.101", "label": "Me" },
     "hayden": { "ip": "192.0.2.102", "label": "Hayden" },
     "jackson": { "ip": "192.0.2.103", "label": "Jackson" }
+  },
+  "td": {
+    "host": "192.0.2.50",
+    "port": 9980,
+    "apiKey": "PASTE-KEY-HERE"
   }
 }

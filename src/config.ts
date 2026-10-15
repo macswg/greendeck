@@ -22,6 +22,14 @@ export interface LilliputConfig {
   label?: string;
 }
 
+/** The show's TouchDesigner HTTP API (see tdapi.ts). */
+export interface TdApiConfig {
+  host: string;
+  port: number;
+  /** Sent as a Bearer token. */
+  apiKey: string;
+}
+
 /**
  * Personal buttons (your own sites, apps and machines) live in a local,
  * git-ignored file so they never end up in the public repo:
@@ -32,6 +40,8 @@ export interface LocalConfig {
   endOfDay?: EndOfDayConfig;
   /** The Monitors page's SDI monitor and each person's tally monitor, by key. */
   lilliput?: { sdi?: LilliputConfig; hayden?: LilliputConfig; jackson?: LilliputConfig };
+  /** When set, the REC key drives this TD instead of the local greendeck.tox link. */
+  td?: TdApiConfig;
 }
 
 export function loadLocalConfig(): LocalConfig {

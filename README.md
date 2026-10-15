@@ -89,6 +89,14 @@ every button.
 In the TD Textport, run `td/install.py` to build a `greendeck` COMP, then map
 names to parameters in its `bindings` table (`name | path | par`).
 
+To drive the show's TD over its HTTP API instead, add a `td` block (`host`,
+`port`, `apiKey`) to `greendeck.local.json`. REC then polls `GET /api/state`
+every second, shows the take's running time, and a press sends
+`POST /api/rec/start`. While recording it becomes a STOP key: pressing sends
+`POST /api/rec/stop/hold` and letting go sends `POST /api/rec/stop/release`.
+TD ends the take only if the release comes at least 1.5s after the hold, so the
+key's bar takes 1.8s to fill (slack for a slow link) and then says LET GO.
+
 ## Keeping secrets out
 
 This repo is public. `npm install` turns on a pre-commit hook (`.githooks/`)

@@ -15,6 +15,7 @@ import { Lilliput } from './lilliput.ts';
 import type { Widget } from './widget.ts';
 import type { PushHub } from './push.ts';
 import { TouchDesigner } from './td.ts';
+import { TdApi } from './tdapi.ts';
 import { Wallpaper, WALLPAPERS } from './wallpaper.ts';
 import { ClaudeKey, ClaudeSlot } from './widgets/claude.ts';
 import { EndOfDayButton } from './widgets/endofday.ts';
@@ -27,7 +28,7 @@ import { SdiHeader, SdiInputButton, SdiMonitor, TallyButton, TallyLight } from '
 import { Clock, EngineStatsWidget, FanKey, LoadKey, PushValue, TempKey } from './widgets/realtime.ts';
 import { SleepButton, WakeButton } from './widgets/standby.ts';
 import { WallpaperButton } from './widgets/wallpaper.ts';
-import { RecordButton, TdToggle } from './widgets/td.ts';
+import { RecordButton, TdToggle, tdApiRecorder, tdRecorder } from './widgets/td.ts';
 
 /**
  * Long-lived state that outlives a deck reconnect. Created once at startup.
@@ -53,6 +54,9 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   ];
   const td = new TouchDesigner(push, { port: Number(process.env.GREENDECK_TD_PORT ?? 9901) });
   td.start();
+  // The show's TD over HTTP, when greendeck.local.json has a `td` block.
+  const tdApi = local.td && new TdApi(local.td);
+  tdApi?.startPolling();
 
   // Background states, highest priority wins. Claude waiting on you is the
   // first; more (recording, alerts, ...) go here.
@@ -98,7 +102,7 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   // machine and git-ignored; delete it to reset.
   const positions = new Positions(new URL('../layout.local.json', import.meta.url).pathname);
 
-  return { push, mon1, mon2, sdi, tallies, td, ambient, wallpaper, attention, claude, brightness, standby, system, fans, mic, positions, local };
+  return { push, mon1, mon2, sdi, tallies, td, tdApi, ambient, wallpaper, attention, claude, brightness, standby, system, fans, mic, positions, local };
 }
 
 export type Services = ReturnType<typeof createServices>;
@@ -158,7 +162,7 @@ export type Services = ReturnType<typeof createServices>;
  *   LAT: press to time how fast the deck answers. The mic only listens while
  *   this page is showing.
  */
-export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, ambient, wallpaper, claude, brightness, standby, system, fans, mic, positions, local }: Services): Pager {
+export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdApi, ambient, wallpaper, claude, brightness, standby, system, fans, mic, positions, local }: Services): Pager {
   const key = (row: number, col: number) => row * 8 + col;
 
   engine.setBrightness(brightness.value);
@@ -206,7 +210,7 @@ export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, amb
     put(key(1, 7), new PageLink(pager, 'Monitors', 'MON'));
 
     // TouchDesigner: names map to parameters in the project's greendeck COMP.
-    put(key(2, 0), new RecordButton(td, 'record', { label: 'REC' }));
+    put(key(2, 0), new RecordButton(tdApi ? tdApiRecorder(tdApi) : tdRecorder(td, 'record'), { label: 'REC' }));
     put(key(2, 1), new TdToggle(td, 'cacherecord', { label: 'CACHE' }));
 
     put(key(3, 0), new SleepButton(standby));
