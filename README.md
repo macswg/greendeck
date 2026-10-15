@@ -69,6 +69,15 @@ Edit `src/layout.ts` to change what goes on each key.
 Buttons for your own sites, apps and machines go in `greendeck.local.json` (git-ignored),
 not in the code. Copy `greendeck.example.json` to start.
 
+## Lilliput monitors
+
+The Monitors page's SDI row and the Hayden / Jackson tallies control Lilliput
+monitors (UQ23) over UDP. Put their IPs under `lilliput` in `greendeck.local.json`.
+The `label` is the monitor's on-screen label text: the monitor can't report it back,
+so greendeck resends it with every tally change. greendeck uses local UDP port 19522,
+which only one program can receive on, so quit greendeck before using another
+Lilliput control tool.
+
 ## Browser deck on Tailscale
 
 To use the browser deck from your other devices, share it on your tailnet (HTTPS,

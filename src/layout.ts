@@ -10,7 +10,8 @@ import type { Engine } from './engine.ts';
 import { MicLevel } from './mic.ts';
 import { Pager } from './pages.ts';
 import { Positions } from './positions.ts';
-import { loadLocalConfig } from './config.ts';
+import { loadLocalConfig, type LilliputConfig } from './config.ts';
+import { Lilliput } from './lilliput.ts';
 import type { Widget } from './widget.ts';
 import type { PushHub } from './push.ts';
 import { TouchDesigner } from './td.ts';
@@ -22,6 +23,7 @@ import { LinkButton } from './widgets/link.ts';
 import { MicGainButton, MicMeterSegment, MicReadout } from './widgets/mic.ts';
 import { PageArrow, PageLink, PageTitle } from './widgets/nav.ts';
 import { Monitor, MonitorHeader, MonitorInputButton } from './widgets/monitor.ts';
+import { SdiHeader, SdiInputButton, SdiMonitor, TallyButton, TallyLight } from './widgets/sdi.ts';
 import { Clock, EngineStatsWidget, FanKey, LoadKey, PushValue, TempKey } from './widgets/realtime.ts';
 import { SleepButton, WakeButton } from './widgets/standby.ts';
 import { WallpaperButton } from './widgets/wallpaper.ts';
@@ -35,6 +37,20 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   const mon2 = new Monitor(2);
   mon1.startPolling();
   mon2.startPolling();
+  const local = loadLocalConfig();
+  // Lilliput monitors from greendeck.local.json; buttons for any that aren't
+  // configured just remember what's pressed.
+  const lilliput = (config: LilliputConfig | undefined) => {
+    if (!config) return undefined;
+    const monitor = new Lilliput(config.ip, config.label);
+    monitor.startPolling();
+    return monitor;
+  };
+  const sdi = new SdiMonitor(lilliput(local.lilliput?.sdi));
+  const tallies = [
+    new TallyLight('Hayden', lilliput(local.lilliput?.hayden)),
+    new TallyLight('Jackson', lilliput(local.lilliput?.jackson)),
+  ];
   const td = new TouchDesigner(push, { port: Number(process.env.GREENDECK_TD_PORT ?? 9901) });
   td.start();
 
@@ -81,9 +97,8 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   // Where buttons have been moved to (from the browser deck). Local to this
   // machine and git-ignored; delete it to reset.
   const positions = new Positions(new URL('../layout.local.json', import.meta.url).pathname);
-  const local = loadLocalConfig();
 
-  return { push, mon1, mon2, td, ambient, wallpaper, attention, claude, brightness, standby, system, fans, mic, positions, local };
+  return { push, mon1, mon2, sdi, tallies, td, ambient, wallpaper, attention, claude, brightness, standby, system, fans, mic, positions, local };
 }
 
 export type Services = ReturnType<typeof createServices>;
@@ -118,7 +133,15 @@ export type Services = ReturnType<typeof createServices>;
  *   │ MON1 │  DP  │  TB  │ HDMI │      │      │      │      │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
  *   │ MON2 │  DP  │  TB  │ HDMI │      │      │      │      │
- *   └──────┴──────┴──── ……… ────┴──────┴──────┴──────┴──────┘
+ *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+ *   │SDIMON│ SDI 1│ SDI 2│ RED  │GREEN │YELLOW│      │  ▲   │
+ *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+ *   │HAYDEN│HAYDEN│JACKSO│JACKSO│      │      │ title│  ▼   │
+ *   │  red │ green│  red │ green│      │      │      │      │
+ *   └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+ *   The SDI row and the people's tallies below it drive Lilliput monitors
+ *   over the LAN (IPs in greendeck.local.json). Tallies are lit only while
+ *   held, one colour per tally at a time.
  *
  *   Claude: one key per session (waiting first), on every non-nav key.
  *
@@ -135,7 +158,7 @@ export type Services = ReturnType<typeof createServices>;
  *   LAT: press to time how fast the deck answers. The mic only listens while
  *   this page is showing.
  */
-export function layout(engine: Engine, { push, mon1, mon2, td, ambient, wallpaper, claude, brightness, standby, system, fans, mic, positions, local }: Services): Pager {
+export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, ambient, wallpaper, claude, brightness, standby, system, fans, mic, positions, local }: Services): Pager {
   const key = (row: number, col: number) => row * 8 + col;
 
   engine.setBrightness(brightness.value);
@@ -204,6 +227,16 @@ export function layout(engine: Engine, { push, mon1, mon2, td, ambient, wallpape
       put(key(row, 2), new MonitorInputButton(mon, 'tb'));
       put(key(row, 3), new MonitorInputButton(mon, 'hdmi'));
     }
+    put(key(2, 0), new SdiHeader(sdi));
+    put(key(2, 1), new SdiInputButton(sdi, 1));
+    put(key(2, 2), new SdiInputButton(sdi, 2));
+    put(key(2, 3), new TallyButton(sdi.tally, 'red'));
+    put(key(2, 4), new TallyButton(sdi.tally, 'green'));
+    put(key(2, 5), new TallyButton(sdi.tally, 'yellow'));
+    tallies.forEach((light, i) => {
+      put(key(3, i * 2), new TallyButton(light, 'red'));
+      put(key(3, i * 2 + 1), new TallyButton(light, 'green'));
+    });
   });
 
   // One key per Claude Code session, waiting ones first. Every key that isn't

@@ -15,6 +15,13 @@ export interface EndOfDayConfig extends Placement {
   name: string;
 }
 
+/** A Lilliput monitor on the LAN (see lilliput.ts). */
+export interface LilliputConfig {
+  ip: string;
+  /** The monitor's on-screen label text, resent with every tally change. */
+  label?: string;
+}
+
 /**
  * Personal buttons (your own sites, apps and machines) live in a local,
  * git-ignored file so they never end up in the public repo:
@@ -23,6 +30,8 @@ export interface EndOfDayConfig extends Placement {
 export interface LocalConfig {
   links?: LinkConfig[];
   endOfDay?: EndOfDayConfig;
+  /** The Monitors page's SDI monitor and each person's tally monitor, by key. */
+  lilliput?: { sdi?: LilliputConfig; hayden?: LilliputConfig; jackson?: LilliputConfig };
 }
 
 export function loadLocalConfig(): LocalConfig {

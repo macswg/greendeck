@@ -19,5 +19,10 @@
     "at": [1, 5],
     "url": "http://my-machine:8088/",
     "name": "Your Name"
+  },
+  "lilliput": {
+    "sdi": { "ip": "192.0.2.101", "label": "Me" },
+    "hayden": { "ip": "192.0.2.102", "label": "Hayden" },
+    "jackson": { "ip": "192.0.2.103", "label": "Jackson" }
   }
 }
