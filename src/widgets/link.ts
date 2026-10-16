@@ -38,7 +38,11 @@ export class LinkButton extends Widget {
     void this.#loadIcon(opts.icon);
   }
 
-  async #loadIcon(icon: string | string[] | undefined): Promise<void> {
+  /**
+   * Load the icon, retrying with backoff (30s, doubling up to 10 minutes) if
+   * it fails, so a network blip at startup doesn't lose it until a restart.
+   */
+  async #loadIcon(icon: string | string[] | undefined, retryMs = 30_000): Promise<void> {
     try {
       if (icon === undefined && 'app' in this.#target) {
         this.#icon = await loadImage(await appIcon(this.#target.app));
@@ -46,9 +50,11 @@ export class LinkButton extends Widget {
         const urls = icon === undefined && 'url' in this.#target ? [new URL('/favicon.ico', this.#target.url).href] : [icon ?? []].flat();
         this.#icon = await firstImage(urls);
       }
+      if (retryMs > 30_000) console.log(`link ${this.#label}: icon loaded`);
       this.invalidate();
     } catch (err) {
-      console.error(`link ${this.#label}: no icon:`, (err as Error).message);
+      if (retryMs === 30_000) console.error(`link ${this.#label}: no icon, will keep retrying:`, (err as Error).message);
+      setTimeout(() => void this.#loadIcon(icon, Math.min(retryMs * 2, 600_000)), retryMs).unref();
     }
   }
 
