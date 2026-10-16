@@ -71,10 +71,12 @@ not in the code. Copy `greendeck.example.json` to start.
 
 ## Lilliput monitors
 
-The Monitors page's SDI row and the Hayden / Jackson tallies control Lilliput
-monitors (UQ23) over UDP. Put their IPs under `lilliput` in `greendeck.local.json`.
-The `label` is the monitor's on-screen label text: the monitor can't report it back,
-so greendeck resends it with every tally change. greendeck uses local UDP port 19522,
+The Monitors page's SDI row and the people's tally keys below it control Lilliput
+monitors (UQ23) over UDP. Put them under `lilliput` in `greendeck.local.json`: `sdi`
+for the SDI monitor, and `people` (name and IP, up to three) for the red / green
+tally keys. The `label` is the monitor's on-screen label text (a person's defaults
+to their name): the monitor can't report it back, so greendeck resends it with
+every tally change. greendeck uses local UDP port 19522,
 which only one program can receive on, so quit greendeck before using another
 Lilliput control tool.
 

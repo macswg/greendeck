@@ -22,6 +22,11 @@ export interface LilliputConfig {
   label?: string;
 }
 
+/** A person's tally monitor: their name goes on the deck's tally keys. */
+export interface PersonTallyConfig extends LilliputConfig {
+  name: string;
+}
+
 /** The show's TouchDesigner HTTP API (see tdapi.ts). */
 export interface TdApiConfig {
   host: string;
@@ -38,8 +43,11 @@ export interface TdApiConfig {
 export interface LocalConfig {
   links?: LinkConfig[];
   endOfDay?: EndOfDayConfig;
-  /** The Monitors page's SDI monitor and each person's tally monitor, by key. */
-  lilliput?: { sdi?: LilliputConfig; hayden?: LilliputConfig; jackson?: LilliputConfig };
+  /**
+   * The Monitors page's SDI monitor, and the people whose tally monitors get
+   * red / green keys on its bottom row (up to three, in order).
+   */
+  lilliput?: { sdi?: LilliputConfig; people?: PersonTallyConfig[] };
   /** When set, the REC key drives this TD instead of the local greendeck.tox link. */
   td?: TdApiConfig;
 }

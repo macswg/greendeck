@@ -1,8 +1,8 @@
 import { createSocket, type Socket } from 'node:dgram';
 
 /**
- * Network control for Lilliput monitors (UQ23 etc.). Ported from
- * moose_2026/mon_control/lilliput.py; see its NOTES.md for the protocol.
+ * Network control for Lilliput monitors (UQ23 etc.), over the UDP protocol
+ * Lilliput's RemoteTerminal app uses.
  *
  * UDP to the monitor's port 19523, sent from local port 19522 (the monitor
  * ignores any other source port); replies come back to 19522. The monitor

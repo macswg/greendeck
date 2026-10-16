@@ -22,8 +22,10 @@
   },
   "lilliput": {
     "sdi": { "ip": "192.0.2.101", "label": "Me" },
-    "hayden": { "ip": "192.0.2.102", "label": "Hayden" },
-    "jackson": { "ip": "192.0.2.103", "label": "Jackson" }
+    "people": [
+      { "name": "Alex", "ip": "192.0.2.102" },
+      { "name": "Sam", "ip": "192.0.2.103" }
+    ]
   },
   "td": {
     "host": "192.0.2.50",

@@ -39,19 +39,19 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   mon1.startPolling();
   mon2.startPolling();
   const local = loadLocalConfig();
-  // Lilliput monitors from greendeck.local.json; buttons for any that aren't
-  // configured just remember what's pressed.
-  const lilliput = (config: LilliputConfig | undefined) => {
-    if (!config) return undefined;
+  // Lilliput monitors from greendeck.local.json. Without an SDI monitor its
+  // buttons just remember what's pressed; people's tallies only appear when
+  // configured, since their names live there too.
+  const lilliput = (config: LilliputConfig) => {
     const monitor = new Lilliput(config.ip, config.label);
     monitor.startPolling();
     return monitor;
   };
-  const sdi = new SdiMonitor(lilliput(local.lilliput?.sdi));
-  const tallies = [
-    new TallyLight('Hayden', lilliput(local.lilliput?.hayden)),
-    new TallyLight('Jackson', lilliput(local.lilliput?.jackson)),
-  ];
+  const sdiConfig = local.lilliput?.sdi;
+  const sdi = new SdiMonitor(sdiConfig && lilliput(sdiConfig));
+  const people = local.lilliput?.people ?? [];
+  if (people.length > 3) console.warn(`lilliput: only the first 3 of ${people.length} people fit on the Monitors page`);
+  const tallies = people.slice(0, 3).map((p) => new TallyLight(p.name, lilliput({ ...p, label: p.label ?? p.name })));
   const td = new TouchDesigner(push, { port: Number(process.env.GREENDECK_TD_PORT ?? 9901) });
   td.start();
   // The show's TD over HTTP, when greendeck.local.json has a `td` block.
@@ -140,8 +140,8 @@ export type Services = ReturnType<typeof createServices>;
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
  *   │SDIMON│ SDI 1│ SDI 2│ RED  │GREEN │YELLOW│      │  ▲   │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
- *   │HAYDEN│HAYDEN│JACKSO│JACKSO│      │      │ title│  ▼   │
- *   │  red │ green│  red │ green│      │      │      │      │
+ *   │PERSON│PERSON│PERSON│PERSON│PERSON│PERSON│ title│  ▼   │
+ *   │ 1 red│1 grn │ 2 red│2 grn │ 3 red│3 grn │      │      │
  *   └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
  *   The SDI row and the people's tallies below it drive Lilliput monitors
  *   over the LAN (IPs in greendeck.local.json). Tallies are lit only while
