@@ -192,14 +192,10 @@ export class CacheRecButton extends Widget {
     if (saving) roundedFill(ctx, s, colors.pending);
     else keyFace(ctx, s, 'action', recording || flash);
     const lit = recording || saving || flash;
-    ctx.fillStyle = lit ? '#fff' : online ? colors.error : colors.dim;
-    ctx.beginPath();
-    ctx.arc(s / 2, s * 0.26, 7, 0, Math.PI * 2);
-    ctx.fill();
-    text(ctx, this.#label, s / 2, s * 0.52, { size: 18, maxWidth: s - 14, color: lit ? '#fff' : online ? colors.text : colors.dim });
+    text(ctx, this.#label, s / 2, s * 0.42, { size: 18, maxWidth: s - 14, color: lit ? '#fff' : online ? colors.text : colors.dim });
     const status = !online ? 'TD offline' : saving ? 'saving' : recording ? 'recording' : state?.cache_on ? 'cache on' : 'cache off';
     const color = lit ? '#fff' : !online ? colors.pending : state?.cache_on ? colors.active : colors.dim;
-    text(ctx, status, s / 2, s * 0.78, { size: 12, maxWidth: s - 14, weight: 'bold', color });
+    text(ctx, status, s / 2, s * 0.68, { size: 12, maxWidth: s - 14, weight: 'bold', color });
   }
 }
 
