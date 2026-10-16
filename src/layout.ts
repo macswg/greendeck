@@ -28,7 +28,7 @@ import { SdiHeader, SdiInputButton, SdiMonitor, TallyButton, TallyLight } from '
 import { Clock, EngineStatsWidget, FanKey, LoadKey, PushValue, TempKey } from './widgets/realtime.ts';
 import { SleepButton, WakeButton } from './widgets/standby.ts';
 import { WallpaperButton } from './widgets/wallpaper.ts';
-import { RecordButton, TdToggle, tdApiRecorder, tdRecorder } from './widgets/td.ts';
+import { CacheRecButton, RecordButton, TdToggle, tdApiRecorder, tdRecorder } from './widgets/td.ts';
 
 /**
  * Long-lived state that outlives a deck reconnect. Created once at startup.
@@ -211,7 +211,7 @@ export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdA
 
     // TouchDesigner: names map to parameters in the project's greendeck COMP.
     put(key(2, 0), new RecordButton(tdApi ? tdApiRecorder(tdApi) : tdRecorder(td, 'record'), { label: 'REC' }));
-    put(key(2, 1), new TdToggle(td, 'cacherecord', { label: 'CACHE' }));
+    put(key(2, 1), tdApi ? new CacheRecButton(tdApi) : new TdToggle(td, 'cacherecord', { label: 'CACHE REC' }));
 
     put(key(3, 0), new SleepButton(standby));
     put(key(3, 1), new Clock());

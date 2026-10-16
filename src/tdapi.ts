@@ -64,6 +64,11 @@ export class TdApi {
     this.#post('/api/rec/start');
   }
 
+  /** Press TD's cache rec button. */
+  cacheRec(): void {
+    this.#post('/api/cache/rec');
+  }
+
   /**
    * Stopping is a hold that TD times itself: hold on press, release on let
    * go. TD only ends the take if the release comes at least 1.5s after the hold.

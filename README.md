@@ -96,6 +96,8 @@ every second, shows the take's running time, and a press sends
 `POST /api/rec/stop/hold` and letting go sends `POST /api/rec/stop/release`.
 TD ends the take only if the release comes at least 1.5s after the hold, so the
 key's bar takes 1.8s to fill (slack for a slow link) and then says LET GO.
+CACHE REC sends `POST /api/cache/rec` and lights from the state's `cache_*`
+fields: red while the cache records, amber while it saves.
 
 ## Keeping secrets out
 

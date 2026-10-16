@@ -1,6 +1,6 @@
 import type { SKRSContext2D } from '@napi-rs/canvas';
 import { Widget } from '../widget.ts';
-import { colors, keyFace, type Role, text } from '../draw.ts';
+import { colors, keyFace, type Role, roundedFill, text } from '../draw.ts';
 import type { TouchDesigner } from '../td.ts';
 import type { TdApi } from '../tdapi.ts';
 import { drawHoldBar, Hold } from '../hold.ts';
@@ -150,6 +150,57 @@ export function tdApiRecorder(api: TdApi): Recorder {
     releaseStop: () => api.releaseStop(),
     subscribe: (fn) => api.subscribe(fn),
   };
+}
+
+/**
+ * CACHE REC on the show TD's HTTP API: a press sends POST /api/cache/rec.
+ * Lit red while TD reports the cache recording, amber while it's saving.
+ */
+export class CacheRecButton extends Widget {
+  #api: TdApi;
+  #label: string;
+  #flashUntil = 0;
+  #unsubscribe: (() => void) | undefined;
+
+  constructor(api: TdApi, opts: { label?: string } = {}) {
+    super();
+    this.#api = api;
+    this.#label = opts.label ?? 'CACHE REC';
+  }
+
+  mount(): void {
+    this.#unsubscribe = this.#api.subscribe(() => this.invalidate());
+  }
+
+  unmount(): void {
+    this.#unsubscribe?.();
+  }
+
+  onDown(): void {
+    if (!this.#api.online) return;
+    this.#api.cacheRec();
+    this.#flashUntil = performance.now() + 150;
+    this.invalidate();
+    setTimeout(() => this.invalidate(), 160);
+  }
+
+  render(ctx: SKRSContext2D, s: number): void {
+    const { online, state } = this.#api;
+    const recording = online && !!state?.cache_recording;
+    const saving = online && !!state?.cache_saving;
+    const flash = performance.now() < this.#flashUntil;
+    if (saving) roundedFill(ctx, s, colors.pending);
+    else keyFace(ctx, s, 'action', recording || flash);
+    const lit = recording || saving || flash;
+    ctx.fillStyle = lit ? '#fff' : online ? colors.error : colors.dim;
+    ctx.beginPath();
+    ctx.arc(s / 2, s * 0.26, 7, 0, Math.PI * 2);
+    ctx.fill();
+    text(ctx, this.#label, s / 2, s * 0.52, { size: 18, maxWidth: s - 14, color: lit ? '#fff' : online ? colors.text : colors.dim });
+    const status = !online ? 'TD offline' : saving ? 'saving' : recording ? 'recording' : state?.cache_on ? 'cache on' : 'cache off';
+    const color = lit ? '#fff' : !online ? colors.pending : state?.cache_on ? colors.active : colors.dim;
+    text(ctx, status, s / 2, s * 0.78, { size: 12, maxWidth: s - 14, weight: 'bold', color });
+  }
 }
 
 function duration(seconds: number): string {
