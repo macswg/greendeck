@@ -23,7 +23,7 @@ import { LatencyTester } from './widgets/latency.ts';
 import { LinkButton } from './widgets/link.ts';
 import { MicGainButton, MicMeterSegment, MicReadout } from './widgets/mic.ts';
 import { PageArrow, PageLink, PageTitle } from './widgets/nav.ts';
-import { Monitor, MonitorHeader, MonitorInputButton } from './widgets/monitor.ts';
+import { Monitor, MonitorHeader, MonitorInputButton, MonitorPreset } from './widgets/monitor.ts';
 import { SdiHeader, SdiInputButton, SdiMonitor, TallyButton, TallyLight } from './widgets/sdi.ts';
 import { Clock, EngineStatsWidget, FanKey, LoadKey, PushValue, TempKey } from './widgets/realtime.ts';
 import { SleepButton, WakeButton } from './widgets/standby.ts';
@@ -114,7 +114,8 @@ export type Services = ReturnType<typeof createServices>;
  *
  *   Main
  *   ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
- *   │      │      │      │      │CLAUDE│ FANS │ TEMP │ LOAD │
+ *   │ MON- │ MON- │      │      │CLAUDE│ FANS │ TEMP │ LOAD │
+ *   │ SHOW │  TB  │      │      │      │      │      │      │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
  *   │      │      │      │      │ link*│ EOD* │      │ MON ›│
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
@@ -124,7 +125,9 @@ export type Services = ReturnType<typeof createServices>;
  *   └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
  *   * In standby the clock's key shows WAKE instead, the only lit key.
  *   link*, EOD* and other personal buttons come from greendeck.local.json.
- *   Presets (top left) switch several monitors at once; none defined yet.
+ *   Presets (top left) switch several monitors at once. MON-SHOW puts MON 1
+ *   on DP, MON 2 on HDMI and the SDI monitor on SDI 1; MON-TB puts both
+ *   Dells on Thunderbolt.
  *
  *   Themes
  *   ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
@@ -201,8 +204,9 @@ export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdA
     });
 
   page('Main', (put) => {
-    // Top left: monitor presets that switch several monitors at once, e.g.
-    //   put(key(0, 0), new MonitorPreset('LAPTOP', [[mon1, 'tb'], [mon2, 'tb']]));
+    // Top left: monitor presets that switch several monitors at once.
+    put(key(0, 0), new MonitorPreset('MON-SHOW', [[mon1, 'dp'], [mon2, 'hdmi']], [sdi, 1]));
+    put(key(0, 1), new MonitorPreset('MON-TB', [[mon1, 'tb'], [mon2, 'tb']]));
     put(key(0, 4), new ClaudeKey(claude));
     put(key(0, 5), new FanKey(system, fans));
     put(key(0, 6), new TempKey(system));

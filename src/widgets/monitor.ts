@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import type { SKRSContext2D } from '@napi-rs/canvas';
 import { Widget } from '../widget.ts';
 import { colors, roundedFill, text } from '../draw.ts';
+import type { SdiInput, SdiMonitor } from './sdi.ts';
 
 const run = promisify(execFile);
 const DELL_INPUT = `${homedir()}/.local/bin/dell-input`;
@@ -148,24 +149,29 @@ export class MonitorInputButton extends MonitorWidget {
 }
 
 /**
- * Switches several monitors at once, e.g. "both on the laptop". Lit when every
- * monitor is already on its preset input.
+ * Switches several monitors at once, e.g. "both on the laptop", optionally
+ * with the SDI monitor too. Lit when every monitor is already on its preset
+ * input.
  *
  *   new MonitorPreset('LAPTOP', [[mon1, 'tb'], [mon2, 'tb']])
+ *   new MonitorPreset('SHOW', [[mon1, 'dp'], [mon2, 'hdmi']], [sdi, 1])
  */
 export class MonitorPreset extends Widget {
   #label: string;
   #targets: readonly (readonly [Monitor, MonitorInput])[];
+  #sdi: readonly [SdiMonitor, SdiInput] | undefined;
   #unsubscribe: (() => void)[] = [];
 
-  constructor(label: string, targets: readonly (readonly [Monitor, MonitorInput])[]) {
+  constructor(label: string, targets: readonly (readonly [Monitor, MonitorInput])[], sdi?: readonly [SdiMonitor, SdiInput]) {
     super();
     this.#label = label;
     this.#targets = targets;
+    this.#sdi = sdi;
   }
 
   mount(): void {
-    this.#unsubscribe = this.#targets.map(([m]) => m.subscribe(() => this.invalidate()));
+    const sources = [...this.#targets.map(([m]) => m), ...(this.#sdi ? [this.#sdi[0]] : [])];
+    this.#unsubscribe = sources.map((m) => m.subscribe(() => this.invalidate()));
   }
 
   unmount(): void {
@@ -174,15 +180,19 @@ export class MonitorPreset extends Widget {
 
   onDown(): void {
     for (const [m, input] of this.#targets) void m.set(input);
+    if (this.#sdi) this.#sdi[0].setInput(this.#sdi[1]);
   }
 
   render(ctx: SKRSContext2D, s: number): void {
     const pending = this.#targets.some(([m]) => m.pending);
-    const active = !pending && this.#targets.every(([m, input]) => m.current === input);
+    const sdiOn = !this.#sdi || this.#sdi[0].input === this.#sdi[1];
+    const active = !pending && sdiOn && this.#targets.every(([m, input]) => m.current === input);
     roundedFill(ctx, s, pending ? colors.pending : active ? colors.active : colors.bg);
     const ink = pending || active ? '#000' : colors.text;
-    text(ctx, this.#label, s / 2, s * 0.42, { size: 20, maxWidth: s - 14, color: ink });
+    const dim = pending || active ? '#000' : colors.dim;
+    text(ctx, this.#label, s / 2, s * (this.#sdi ? 0.36 : 0.42), { size: 20, maxWidth: s - 14, color: ink });
     const summary = this.#targets.map(([m, input]) => `${m.id}·${INPUT_LABELS[input]}`).join('  ');
-    text(ctx, summary, s / 2, s * 0.7, { size: 12, maxWidth: s - 12, weight: 'normal', color: pending || active ? '#000' : colors.dim });
+    text(ctx, summary, s / 2, s * (this.#sdi ? 0.64 : 0.7), { size: 12, maxWidth: s - 12, weight: 'normal', color: dim });
+    if (this.#sdi) text(ctx, `SDI ${this.#sdi[1]}`, s / 2, s * 0.82, { size: 12, maxWidth: s - 12, weight: 'normal', color: dim });
   }
 }
