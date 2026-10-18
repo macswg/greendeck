@@ -12,6 +12,7 @@ import { Pager } from './pages.ts';
 import { Positions } from './positions.ts';
 import { loadLocalConfig, type LilliputConfig } from './config.ts';
 import { Lilliput } from './lilliput.ts';
+import { OscRecorder } from './oscrec.ts';
 import type { Widget } from './widget.ts';
 import type { PushHub } from './push.ts';
 import { TouchDesigner } from './td.ts';
@@ -57,6 +58,9 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   // The show's TD over HTTP, when greendeck.local.json has a `td` block.
   const tdApi = local.td && new TdApi(local.td);
   tdApi?.startPolling();
+  // The show machine's OSC recorder, when greendeck.local.json has an `oscRecorder` block.
+  const oscRecorder = local.oscRecorder && new OscRecorder(local.oscRecorder);
+  oscRecorder?.startPolling();
 
   // Background states, highest priority wins. Claude waiting on you is the
   // first; more (recording, alerts, ...) go here.
@@ -102,7 +106,7 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   // machine and git-ignored; delete it to reset.
   const positions = new Positions(new URL('../layout.local.json', import.meta.url).pathname);
 
-  return { push, mon1, mon2, sdi, tallies, td, tdApi, ambient, wallpaper, attention, claude, brightness, standby, system, fans, mic, positions, local };
+  return { push, mon1, mon2, sdi, tallies, td, tdApi, oscRecorder, ambient, wallpaper, attention, claude, brightness, standby, system, fans, mic, positions, local };
 }
 
 export type Services = ReturnType<typeof createServices>;
@@ -117,14 +121,16 @@ export type Services = ReturnType<typeof createServices>;
  *   │ MON- │ MON- │      │      │CLAUDE│ FANS │ TEMP │ LOAD │
  *   │ SHOW │  TB  │      │      │      │      │      │      │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
- *   │      │      │      │      │ link*│ EOD* │      │ MON ›│
+ *   │OSC*  │      │      │      │ link*│ EOD* │      │ MON ›│
+ *   │ REC  │      │      │      │      │      │      │      │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
  *   │  REC │ CACHE│      │      │      │      │      │  ▲   │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
  *   │ SLEEP│clock*│      │      │      │ WEB  │ title│  ▼   │
  *   └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
  *   * In standby the clock's key shows WAKE instead, the only lit key.
- *   link*, EOD* and other personal buttons come from greendeck.local.json.
+ *   link*, EOD* and other personal buttons come from greendeck.local.json,
+ *   and OSC REC* only appears when its recorder is configured there.
  *   Presets (top left) switch several monitors at once. MON-SHOW puts MON 1
  *   on DP, MON 2 on HDMI and the SDI monitor on SDI 1; MON-TB puts both
  *   Dells on Thunderbolt.
@@ -165,7 +171,7 @@ export type Services = ReturnType<typeof createServices>;
  *   LAT: press to time how fast the deck answers. The mic only listens while
  *   this page is showing.
  */
-export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdApi, ambient, wallpaper, claude, brightness, standby, system, fans, mic, positions, local }: Services): Pager {
+export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdApi, oscRecorder, ambient, wallpaper, claude, brightness, standby, system, fans, mic, positions, local }: Services): Pager {
   const key = (row: number, col: number) => row * 8 + col;
 
   engine.setBrightness(brightness.value);
@@ -213,6 +219,8 @@ export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdA
     put(key(0, 7), new LoadKey(system));
     put(key(1, 7), new PageLink(pager, 'Monitors', 'MON'));
 
+    // The show machine's OSC recorder: press to start, hold to stop, like REC.
+    if (oscRecorder) put(key(1, 0), new RecordButton(oscRecorder, { label: 'OSC REC' }));
     // TouchDesigner: names map to parameters in the project's greendeck COMP.
     put(key(2, 0), new RecordButton(tdApi ? tdApiRecorder(tdApi) : tdRecorder(td, 'record'), { label: 'REC' }));
     put(key(2, 1), tdApi ? new CacheRecButton(tdApi) : new TdToggle(td, 'cacherecord', { label: 'CACHE REC' }));

@@ -35,6 +35,12 @@ export interface TdApiConfig {
   apiKey: string;
 }
 
+/** The show machine's OSC recorder HTTP API (see oscrec.ts). */
+export interface OscRecorderConfig {
+  host: string;
+  port: number;
+}
+
 /**
  * Personal buttons (your own sites, apps and machines) live in a local,
  * git-ignored file so they never end up in the public repo:
@@ -50,6 +56,8 @@ export interface LocalConfig {
   lilliput?: { sdi?: LilliputConfig; people?: PersonTallyConfig[] };
   /** When set, the REC key drives this TD instead of the local greendeck.tox link. */
   td?: TdApiConfig;
+  /** When set, Main gets an OSC REC key above REC. */
+  oscRecorder?: OscRecorderConfig;
 }
 
 export function loadLocalConfig(): LocalConfig {

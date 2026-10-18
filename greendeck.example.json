@@ -31,5 +31,9 @@
     "host": "192.0.2.50",
     "port": 9980,
     "apiKey": "PASTE-KEY-HERE"
+  },
+  "oscRecorder": {
+    "host": "192.0.2.50",
+    "port": 8415
   }
 }

@@ -95,11 +95,22 @@ To drive the show's TD over its HTTP API instead, add a `td` block (`host`,
 `port`, `apiKey`) to `greendeck.local.json`. REC then polls `GET /api/state`
 every second, shows the take's running time, and a press sends
 `POST /api/rec/start`. While recording it becomes a STOP key: pressing sends
-`POST /api/rec/stop/hold` and letting go sends `POST /api/rec/stop/release`.
-TD ends the take only if the release comes at least 1.5s after the hold, so the
-key's bar takes 1.8s to fill (slack for a slow link) and then says LET GO.
+`POST /api/rec/stop/hold`, and `POST /api/rec/stop/release` goes out when the
+key's bar fills, while you're still holding (or when you let go early). TD ends
+the take only if the release comes at least 1.5s after the hold, so the bar takes
+1.8s to fill (slack for a slow link).
 CACHE REC sends `POST /api/cache/rec` and lights from the state's `cache_*`
 fields: red while the cache records, amber while it saves.
+
+## OSC recorder
+
+Add an `oscRecorder` block (`host`, `port`) to `greendeck.local.json` for an
+OSC REC key above REC. It polls `GET /api/status` every second (`recording`
+is null when stopped), a press sends `POST /api/record/start`, and while
+recording it's a STOP key: `POST /api/record/stop` goes out once it's been held
+for 1s, without waiting for you to let go.
+The recorder doesn't report how long the take has run, so the key times it
+from when greendeck first saw it recording.
 
 ## Keeping secrets out
 

@@ -70,8 +70,9 @@ export class TdApi {
   }
 
   /**
-   * Stopping is a hold that TD times itself: hold on press, release on let
-   * go. TD only ends the take if the release comes at least 1.5s after the hold.
+   * Stopping is a hold that TD times itself: hold on press, release once the
+   * key's hold completes (or on letting go early). TD only ends the take if
+   * the release comes at least 1.5s after the hold.
    */
   holdStop(): void {
     this.#post('/api/rec/stop/hold');

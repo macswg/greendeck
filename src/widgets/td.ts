@@ -94,6 +94,8 @@ export class TdPulse extends TdWidget {
 export interface Recorder {
   readonly online: boolean;
   readonly recording: boolean;
+  /** What it records into, shown as "TD online" / "TD offline"; defaults to TD. */
+  readonly name?: string;
   /** Seconds into the current take, when known. */
   readonly seconds?: number;
   /** Shown under REC in place of "TD online" when it can't record yet. */
@@ -103,7 +105,10 @@ export interface Recorder {
   start(): void;
   /** STOP pressed: a hold to end the take begins. */
   holdStop(): void;
-  /** STOP let go; `full` when it was held for the whole `holdMs`. */
+  /**
+   * The hold ended: `full` when it lasted the whole `holdMs` (sent right then,
+   * while the key is still down), otherwise STOP was let go early.
+   */
   releaseStop(full: boolean): void;
   subscribe(fn: () => void): () => void;
 }
@@ -142,7 +147,8 @@ export function tdApiRecorder(api: TdApi): Recorder {
       return api.seconds;
     },
     // TD needs 1.5s between hold and release; the extra 0.3s covers the hold
-    // reaching TD later than the release over a slow link.
+    // reaching TD later than the release over a slow link. The release goes
+    // out as soon as the hold completes.
     holdMs: 1800,
     start: () => api.startRecording(),
     holdStop: () => api.holdStop(),
@@ -209,16 +215,20 @@ function duration(seconds: number): string {
 
 /**
  * A record button. Press to start. While recording it turns into a bright red
- * STOP key that needs a long press, so a stray tap can't end a take: hold
- * until the bar fills, then let go to stop; letting go early cancels.
+ * STOP key that needs a long press, so a stray tap can't end a take: the stop
+ * goes out the moment the bar fills; letting go before that cancels.
  */
 export class RecordButton extends Widget {
   #rec: Recorder;
   #label: string;
   #hold: Hold;
   #holding = false;
-  /** Held for the whole hold time: letting go now ends the take. */
-  #full = false;
+  /**
+   * The stop has gone out; shown until the recorder reports it stopped, or
+   * for a few seconds if it never does (so a failed stop shows STOP again).
+   */
+  #stopping = false;
+  #stoppingTimer: NodeJS.Timeout | undefined;
   #unsubscribe: (() => void) | undefined;
 
   constructor(rec: Recorder, opts: { label?: string; holdMs?: number } = {}) {
@@ -227,42 +237,49 @@ export class RecordButton extends Widget {
     this.#label = opts.label ?? 'REC';
     this.#hold = new Hold(
       opts.holdMs ?? rec.holdMs ?? 1000,
-      () => {
-        this.#full = true;
-        this.invalidate();
-      },
+      () => this.#endHold(true),
       () => this.invalidate(),
     );
   }
 
   mount(): void {
-    this.#unsubscribe = this.#rec.subscribe(() => this.invalidate());
+    this.#unsubscribe = this.#rec.subscribe(() => {
+      if (!this.#rec.recording) this.#stopping = false;
+      this.invalidate();
+    });
   }
 
   onDown(): void {
     if (!this.#rec.online) return;
     if (!this.#rec.recording) return this.#rec.start();
     this.#holding = true;
-    this.#full = false;
+    this.#stopping = false;
     this.#rec.holdStop();
     this.#hold.start();
   }
 
   onUp(): void {
-    this.#endHold(this.#full);
+    this.#endHold(false);
   }
 
   unmount(): void {
     this.#endHold(false);
+    clearTimeout(this.#stoppingTimer);
     this.#unsubscribe?.();
   }
 
   #endHold(full: boolean): void {
     if (!this.#holding) return;
     this.#holding = false;
-    this.#full = false;
-    if (full) this.#hold.cancel();
-    else this.#hold.release();
+    this.#stopping = full;
+    clearTimeout(this.#stoppingTimer);
+    if (full) {
+      this.#hold.cancel();
+      this.#stoppingTimer = setTimeout(() => {
+        this.#stopping = false;
+        this.invalidate();
+      }, 5000);
+    } else this.#hold.release();
     this.#rec.releaseStop(full);
     this.invalidate();
   }
@@ -276,7 +293,8 @@ export class RecordButton extends Widget {
       ctx.arc(s / 2, s * 0.3, 7, 0, Math.PI * 2);
       ctx.fill();
       text(ctx, this.#label, s / 2, s * 0.56, { size: 22, maxWidth: s - 14, color: online ? colors.text : colors.dim });
-      const status = !online ? 'TD offline' : (this.#rec.status ?? 'TD online');
+      const name = this.#rec.name ?? 'TD';
+      const status = !online ? `${name} offline` : (this.#rec.status ?? `${name} online`);
       const color = !online ? colors.pending : this.#rec.status ? colors.dim : colors.active;
       text(ctx, status, s / 2, s * 0.8, { size: 12, maxWidth: s - 14, weight: 'bold', color });
       return;
@@ -289,9 +307,9 @@ export class RecordButton extends Widget {
     ctx.fill();
     const seconds = this.#rec.seconds;
     text(ctx, seconds !== undefined ? duration(seconds) : 'STOP', s / 2, s * 0.56, { size: 22, maxWidth: s - 14, color: '#fff' });
-    const progress = this.#full ? 1 : this.#hold.progress;
-    const loud = this.#full || this.#hold.hinting;
-    const hint = this.#full ? 'LET GO' : progress !== undefined ? 'keep holding' : this.#hold.hinting ? 'HOLD' : 'hold to stop';
+    const progress = this.#stopping ? 1 : this.#hold.progress;
+    const loud = this.#stopping || this.#hold.hinting;
+    const hint = this.#stopping ? 'STOPPING' : progress !== undefined ? 'keep holding' : this.#hold.hinting ? 'HOLD' : 'hold to stop';
     text(ctx, hint, s / 2, s * 0.77, {
       size: loud ? 14 : 11,
       maxWidth: s - 14,
