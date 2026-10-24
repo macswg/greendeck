@@ -28,4 +28,28 @@ fi
 
 printf '\e]0;greendeck\a'
 echo "Starting greendeck. Browser deck: http://localhost:9902"
+
+# Once node is up, tuck this Terminal window away in the Dock. It stays open,
+# so closing it still stops greendeck. Skipped if node died straight away, so
+# the error stays on screen; only Terminal.app knows how to do this. The exec
+# below keeps this shell's pid ($$), so that pid still existing means node is
+# up (pgrep can't be used here: it ignores its own ancestors, which node is).
+if [ "$TERM_PROGRAM" = Apple_Terminal ]; then
+  TTY=$(tty)
+  (
+    sleep 2; kill -0 $$ 2>/dev/null || exit 0
+    osascript - "$TTY" 2>/dev/null <<'EOF'
+on run argv
+  tell application "Terminal"
+    repeat with w in windows
+      repeat with t in tabs of w
+        if tty of t is item 1 of argv then set miniaturized of w to true
+      end repeat
+    end repeat
+  end tell
+end run
+EOF
+  ) &
+fi
+
 exec node "$MAIN"
