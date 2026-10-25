@@ -102,7 +102,7 @@ the take only if the release comes at least 1.5s after the hold, so the bar take
 CACHE REC sends `POST /api/cache/rec` and lights from the state's `cache_*`
 fields: red while the cache records, amber while it saves.
 
-## OSC recorder
+## OSC recorder and timecode Greenalyzer
 
 Add an `oscRecorder` block (`host`, `port`) to `greendeck.local.json` for an
 OSC REC key above REC. It polls `GET /api/status` every second (`recording`
@@ -111,6 +111,15 @@ recording it's a STOP key: `POST /api/record/stop` goes out once it's been held
 for 1s, without waiting for you to let go.
 The recorder doesn't report how long the take has run, so the key times it
 from when greendeck first saw it recording.
+
+The same block gives a TC REC key to its right, for the SMPTE Timecode
+Greenalyzer's recorder. The OSC listener (1.8.0 or later) relays to the
+Greenalyzer page open on that machine: TC REC polls `GET
+/api/greenalyzer/status`, and start and stop are `POST
+/api/greenalyzer/record/start` and `/stop`, held the same way. The page has to
+be open with REMOTE on, or the key reads "no page" ("page asleep" once it
+stops reporting in, "page error" when it can't write its file) and a start
+would be lost. The take's time comes from the page's own `started` stamp.
 
 ## Keeping secrets out
 

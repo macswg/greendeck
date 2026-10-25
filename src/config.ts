@@ -35,7 +35,10 @@ export interface TdApiConfig {
   apiKey: string;
 }
 
-/** The show machine's OSC recorder HTTP API (see oscrec.ts). */
+/**
+ * The show machine's OSC listener HTTP API (see oscrec.ts): its OSC recorder,
+ * and the timecode Greenalyzer page it relays record commands to.
+ */
 export interface OscRecorderConfig {
   host: string;
   port: number;
@@ -56,7 +59,7 @@ export interface LocalConfig {
   lilliput?: { sdi?: LilliputConfig; people?: PersonTallyConfig[] };
   /** When set, the REC key drives this TD instead of the local greendeck.tox link. */
   td?: TdApiConfig;
-  /** When set, Main gets an OSC REC key above REC. */
+  /** When set, Main gets OSC REC and TC REC keys above REC and CACHE REC. */
   oscRecorder?: OscRecorderConfig;
 }
 
