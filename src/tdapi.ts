@@ -5,9 +5,6 @@ export interface TdApiState {
   rec: boolean;
   recording: string | null;
   rec_seconds: number | null;
-  cache_on: boolean;
-  cache_recording: boolean;
-  cache_saving: boolean;
   marks: number;
   stop_held: boolean;
   time: string;
@@ -62,11 +59,6 @@ export class TdApi {
 
   startRecording(): void {
     this.#post('/api/rec/start');
-  }
-
-  /** Press TD's cache rec button. */
-  cacheRec(): void {
-    this.#post('/api/cache/rec');
   }
 
   /**

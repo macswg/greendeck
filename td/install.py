@@ -27,7 +27,6 @@ def install_greendeck(parent_path='/project1'):
 		bindings.clear()
 		bindings.appendRow(['name', 'path', 'par'])
 		bindings.appendRow(['record', '', ''])
-		bindings.appendRow(['cacherecord', '', ''])
 
 	link = gd.op('link') or gd.create(textDAT, 'link')
 	link.par.file = os.path.join(GREENDECK_TD_DIR, 'link.py')

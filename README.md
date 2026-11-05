@@ -99,8 +99,6 @@ every second, shows the take's running time, and a press sends
 key's bar fills, while you're still holding (or when you let go early). TD ends
 the take only if the release comes at least 1.5s after the hold, so the bar takes
 1.8s to fill (slack for a slow link).
-CACHE REC sends `POST /api/cache/rec` and lights from the state's `cache_*`
-fields: red while the cache records, amber while it saves.
 
 ## OSC recorder and timecode Greenalyzer
 

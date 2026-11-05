@@ -5,7 +5,6 @@
 #
 #   name          path                 par
 #   record        /project1/moviout    record
-#   cacherecord   /project1/cache1     active
 #
 # Deck -> TD (udpin, port 9901):  set <name> <value> | pulse <name> | sync
 # TD -> deck (udpout, port 9900): td.<name> <value>, sent whenever a bound

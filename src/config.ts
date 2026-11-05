@@ -59,7 +59,7 @@ export interface LocalConfig {
   lilliput?: { sdi?: LilliputConfig; people?: PersonTallyConfig[] };
   /** When set, the REC key drives this TD instead of the local greendeck.tox link. */
   td?: TdApiConfig;
-  /** When set, Main gets OSC REC and TC REC keys above REC and CACHE REC. */
+  /** When set, Main gets OSC REC and TC REC keys above REC. */
   oscRecorder?: OscRecorderConfig;
 }
 
