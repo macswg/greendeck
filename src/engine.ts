@@ -10,6 +10,7 @@ import type { Widget } from './widget.ts';
 export interface Surface {
   readonly CONTROLS: Readonly<StreamDeckControlDefinition[]>;
   on(event: 'down' | 'up', fn: (control: StreamDeckControlDefinition) => void): unknown;
+  off(event: 'down' | 'up', fn: (control: StreamDeckControlDefinition) => void): unknown;
   fillKeyBuffer(index: number, pixels: Uint8ClampedArray, options: { format: 'rgba' }): Promise<void>;
   setBrightness(percent: number): Promise<void>;
 }
@@ -144,11 +145,18 @@ export class Engine {
       for (const fn of this.#onStats) fn();
     }, 1000);
 
-    deck.on('down', (c) => {
+    // Removed on stop, so a new engine can take over the same deck.
+    const down = (c: StreamDeckControlDefinition) => {
       if (c.type === 'button') this.#active.get(c.index)?.onDown?.();
-    });
-    deck.on('up', (c) => {
+    };
+    const up = (c: StreamDeckControlDefinition) => {
       if (c.type === 'button') this.#active.get(c.index)?.onUp?.();
+    };
+    deck.on('down', down);
+    deck.on('up', up);
+    this.#onStop.push(() => {
+      deck.off('down', down);
+      deck.off('up', up);
     });
   }
 

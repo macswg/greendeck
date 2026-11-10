@@ -172,9 +172,121 @@ function grid(ctx: SKRSContext2D): void {
   ctx.fillRect(0, horizon - 2, W, 3);
 }
 
+/**
+ * FOREST: the view from a high ridge at first light, over a valley of pine
+ * forest. Hazy blue mountains on the horizon, then rows of treetops getting
+ * darker and larger toward us, with mist lying between them and a river
+ * catching the light down in the valley. The eagles are drawn live over it
+ * (EagleFlight in src/background.ts).
+ */
+function forest(ctx: SKRSContext2D): void {
+  const rand = random(11);
+  const horizon = H * 0.3;
+
+  // Sky: deep blue up top, warming to a pale dawn gold along the far peaks.
+  const sky = ctx.createLinearGradient(0, 0, 0, horizon + 60);
+  sky.addColorStop(0, '#07101c');
+  sky.addColorStop(0.5, '#1b2c40');
+  sky.addColorStop(0.85, '#5a5a58');
+  sky.addColorStop(1, '#8a6f4e');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+  // The sun's glow, just under the horizon on the right.
+  const sun = ctx.createRadialGradient(W * 0.72, horizon + 30, 0, W * 0.72, horizon + 30, W * 0.4);
+  sun.addColorStop(0, 'rgba(255, 190, 110, 0.45)');
+  sun.addColorStop(0.4, 'rgba(230, 140, 80, 0.12)');
+  sun.addColorStop(1, 'rgba(200, 100, 60, 0)');
+  ctx.fillStyle = sun;
+  ctx.fillRect(0, 0, W, H);
+
+  // Far mountains: smooth ridges in the haze, each nearer one darker.
+  const ridge = (base: number, height: number, color: string, waves: number[]) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 8) {
+      let y = 0;
+      waves.forEach((w, i) => (y += Math.sin(x * w + i * 1.7) / (i + 1)));
+      ctx.lineTo(x, base - height * (0.55 + 0.45 * y / 1.8));
+    }
+    ctx.lineTo(W, H);
+    ctx.fill();
+  };
+  ridge(horizon + 20, 70, '#3c4654', [0.004, 0.011, 0.027]);
+  ridge(horizon + 55, 60, '#2c3846', [0.006, 0.015, 0.031]);
+
+  // Mist: soft patches lying low between the hills, not even bands.
+  const mist = (y: number, h: number, alpha: number) => {
+    for (let i = 0; i < 7; i++) {
+      const x = rand() * W;
+      const rx = W * (0.12 + rand() * 0.18);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, `rgba(175, 185, 195, ${alpha})`);
+      g.addColorStop(1, 'rgba(175, 185, 195, 0)');
+      ctx.save();
+      ctx.translate(x, y + (rand() - 0.5) * h);
+      ctx.scale(rx, h);
+      ctx.fillStyle = g;
+      ctx.fillRect(-1, -1, 2, 2);
+      ctx.restore();
+    }
+  };
+  mist(horizon + 70, 30, 0.3);
+
+  // Rows of pines from the far side of the valley toward us, rolling like
+  // hillsides: each row lower on the picture, with bigger, darker trees, mist
+  // in the hollows between, and the dawn catching their right-hand sides.
+  const rows = 9;
+  for (let r = 0; r < rows; r++) {
+    const near = r / (rows - 1);
+    const base = horizon + 95 + (H - horizon - 40) * near ** 1.35;
+    const size = 10 + 95 * near ** 1.6;
+    const roll = 18 + 70 * near;
+    const phase = rand() * 10;
+    const hill = (x: number) => base + Math.sin(x * (0.0022 + 0.001 * near) + phase) * roll * 0.5 + Math.sin(x * 0.0061 + phase * 2) * roll * 0.2;
+    const shade = 36 - 26 * near;
+    const fill = `rgb(${Math.round(shade * 0.6)}, ${Math.round(shade * 1.25)}, ${Math.round(shade * 0.85)})`;
+    const lit = `rgba(${Math.round(150 - 60 * near)}, ${Math.round(130 - 50 * near)}, 90, ${0.16 - 0.1 * near})`;
+    const trees: [number, number, number, number][] = [];
+    let x = -size;
+    while (x < W + size) {
+      const h = size * (0.8 + rand() * 0.6);
+      const w = size * (0.32 + rand() * 0.12);
+      trees.push([x, hill(x) + (rand() - 0.5) * size * 0.3, w, h]);
+      x += w * (1.1 + rand() * 0.5);
+    }
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (const [tx, ty, w, h] of trees) {
+      ctx.lineTo(tx - w, ty);
+      ctx.lineTo(tx, ty - h);
+      ctx.lineTo(tx + w, ty);
+    }
+    ctx.lineTo(W, H);
+    ctx.fill();
+    // The sunward side of each tip, stronger toward the sun on the right.
+    for (const [tx, ty, w, h] of trees) {
+      ctx.globalAlpha = 0.4 + 0.6 * (tx / W);
+      ctx.fillStyle = lit;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty - h);
+      ctx.lineTo(tx + w, ty);
+      ctx.lineTo(tx + w * 0.2, ty - h * 0.15);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (r < rows - 2) mist(base + roll * 0.4, 14 + 26 * near, 0.2 * (1 - near));
+  }
+
+  // Keep it dark enough for key labels: a gentle shade over everything.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+  ctx.fillRect(0, 0, W, H);
+}
+
 const out = new URL('../assets/wallpapers/', import.meta.url);
 mkdirSync(out, { recursive: true });
-for (const [name, draw] of Object.entries({ dusk, grid })) {
+for (const [name, draw] of Object.entries({ dusk, grid, forest })) {
   const canvas = createCanvas(W, H);
   draw(canvas.getContext('2d'));
   writeFileSync(new URL(`${name}.png`, out), canvas.toBuffer('image/png'));

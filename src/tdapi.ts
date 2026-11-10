@@ -12,7 +12,7 @@ export interface TdApiState {
 
 /**
  * The show's TouchDesigner, over its HTTP API (host, port and key in
- * greendeck.local.json). Polls /api/state so the deck always shows TD's real
+ * the config). Polls /api/state so the deck always shows TD's real
  * state, including changes made inside TD; commands are POSTs, followed by an
  * immediate re-poll so the key catches up without waiting for the next tick.
  */

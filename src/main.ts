@@ -1,5 +1,6 @@
 import { listStreamDecks, openStreamDeck, type StreamDeck } from '@elgato-stream-deck/node';
-import { Engine } from './engine.ts';
+import { Engine, type Surface } from './engine.ts';
+import type { Pager } from './pages.ts';
 import { createServices, layout } from './layout.ts';
 import { PushHub } from './push.ts';
 import { VirtualDeck } from './virtual.ts';
@@ -25,18 +26,44 @@ const services = createServices(push, { brightness: BRIGHTNESS });
 
 if (VIRTUAL_PORT) startVirtualDeck();
 
+/**
+ * Lay out a surface, and lay it out again on a fresh engine whenever the
+ * config is switched, staying on the page it was showing. Returns a stop
+ * function that ends the current engine.
+ */
+function runLayout(surface: Surface, opts: { maxFps: number }, started: (engine: Engine, pager: Pager) => void): () => Promise<void> {
+  let engine: Engine | undefined;
+  const start = (page?: string) => {
+    engine = new Engine(surface, { ...opts, brightness: BRIGHTNESS });
+    const pager = layout(engine, services);
+    if (page) pager.goTo(page);
+    started(engine, pager);
+    return pager;
+  };
+  let pager = start();
+  const unsubscribe = services.configs.subscribe(() => {
+    const page = pager.name;
+    void engine?.stop();
+    pager = start(page);
+  });
+  return async () => {
+    unsubscribe();
+    await engine?.stop();
+    engine = undefined;
+  };
+}
+
 /** The browser deck gets its own engine, running only while a page is open. */
 function startVirtualDeck(): void {
   const deck = new VirtualDeck({ version: versionString() });
-  let engine: Engine | undefined;
+  let stop: (() => Promise<void>) | undefined;
   deck.on('connect', () => {
-    engine = new Engine(deck, { maxFps: VIRTUAL_FPS, brightness: BRIGHTNESS });
-    deck.attachPager(layout(engine, services));
+    stop = runLayout(deck, { maxFps: VIRTUAL_FPS }, (_engine, pager) => deck.attachPager(pager));
   });
   deck.on('disconnect', () => {
     deck.attachPager(undefined);
-    void engine?.stop();
-    engine = undefined;
+    void stop?.();
+    stop = undefined;
   });
   // The page's slider sets the shared backlight level (the hardware follows).
   deck.on('backlight', (percent: number) => services.brightness.set(percent));
@@ -45,11 +72,11 @@ function startVirtualDeck(): void {
   deck.listen(VIRTUAL_PORT, VIRTUAL_HOST);
 }
 
-let current: { deck: StreamDeck; engine: Engine } | undefined;
+let current: { deck: StreamDeck; stop: () => Promise<void> } | undefined;
 
 async function shutdown(): Promise<void> {
   if (current) {
-    await current.engine.stop();
+    await current.stop();
     await current.deck.resetToLogo().catch(() => {});
     await current.deck.close().catch(() => {});
   }
@@ -82,22 +109,22 @@ async function run(): Promise<never> {
 
     console.log(`connected: ${deck.PRODUCT_NAME} (${info.serialNumber})`);
     await deck.clearPanel();
-    const engine = new Engine(deck, { maxFps: MAX_FPS, brightness: BRIGHTNESS });
-    current = { deck, engine };
-    layout(engine, services);
-    if (process.env.GREENDECK_STATS) {
-      engine.onStats(() => {
-        const { fps, keysPerSec, frameMs } = engine.stats;
-        console.log(`${fps} fps  ${keysPerSec} keys/s  ${frameMs.toFixed(1)} ms/frame`);
-      });
-    }
+    const stop = runLayout(deck, { maxFps: MAX_FPS }, (engine) => {
+      if (process.env.GREENDECK_STATS) {
+        engine.onStats(() => {
+          const { fps, keysPerSec, frameMs } = engine.stats;
+          console.log(`${fps} fps  ${keysPerSec} keys/s  ${frameMs.toFixed(1)} ms/frame`);
+        });
+      }
+    });
+    current = { deck, stop };
 
     await new Promise<void>((resolve) => deck.once('error', (err) => {
       console.error('deck error, reconnecting:', (err as Error)?.message ?? err);
       resolve();
     }));
     current = undefined;
-    await engine.stop();
+    await stop();
     await deck.close().catch(() => {});
     await sleep(1000);
   }

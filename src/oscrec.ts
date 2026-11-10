@@ -141,7 +141,7 @@ export interface OscRecorderStatus {
 }
 
 /**
- * The OSC recorder on the show machine (host and port in greendeck.local.json).
+ * The OSC recorder on the show machine (host and port in the config).
  * It doesn't say how long a take has run, so the deck times it.
  */
 export class OscRecorder extends HttpRecorder<OscRecorderStatus> {

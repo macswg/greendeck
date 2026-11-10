@@ -20,6 +20,7 @@ secrets*
 
 # Machine-specific config: keep local overrides as *.local.* files
 *.local.*
+configs/
 .claude/settings.local.json
 
 # TouchDesigner autosaves and backups

@@ -432,6 +432,206 @@ export class LaserSweep extends Layer {
   }
 }
 
+/** Where an eagle is this frame, in 0–1 shares of the panel. */
+interface EagleState {
+  x: number;
+  y: number;
+  /** Direction of travel on the ground plane, radians (0 = right). */
+  heading: number;
+  /** Half the wingspan, as a share of the panel's width. */
+  span: number;
+  /** 1 with wings spread, less mid-flap. */
+  wings: number;
+  /** Leaning into a turn: -1–1, the inner wing foreshortened. */
+  bank: number;
+  /** 0–1: far birds fade into the haze. */
+  haze: number;
+}
+
+/** One eagle's flight: where it is at time t, or undefined while it's away. */
+type EaglePath = (t: number) => EagleState | undefined;
+
+/** Seen from high up at a slant, flat things on the ground plane look squashed. */
+const EAGLE_SQUASH = 0.42;
+/**
+ * The birds themselves are squashed less than that, so their spread wings
+ * still read when they fly across the view.
+ */
+const EAGLE_BODY_SQUASH = 0.75;
+
+/** Wings beating: a few strokes a second, from spread down to 60%. */
+function flapping(t: number): number {
+  return 0.8 + 0.2 * Math.cos(t * Math.PI * 2 * 1.4);
+}
+
+/**
+ * Circling in a thermal around (cx, cy): a ring on the ground plane, so it
+ * reads as an ellipse from up here. Flaps a few strokes now and then.
+ */
+function thermal(o: { cx: number; cy: number; r: number; period: number; span: number; haze: number; dir: 1 | -1; seed: number }): EaglePath {
+  return (t) => {
+    const a = o.dir * (t / o.period) * Math.PI * 2 + o.seed;
+    // The thermal drifts slowly, so the circles don't sit in one place.
+    const cx = o.cx + Math.sin(t / 41 + o.seed) * 0.04;
+    const cy = o.cy + Math.sin(t / 53 + o.seed * 2) * 0.02;
+    const burst = (t + o.seed * 7) % 19;
+    return {
+      x: cx + Math.cos(a) * o.r,
+      y: cy + Math.sin(a) * o.r * EAGLE_SQUASH * 2,
+      heading: a + o.dir * Math.PI / 2,
+      span: o.span,
+      wings: burst < 1.8 ? flapping(burst) : 1,
+      bank: o.dir * 0.35,
+      haze: o.haze,
+    };
+  };
+}
+
+/**
+ * Flying straight across the valley every `every` seconds, taking `cross`
+ * seconds, with a gentle rise and fall. Flaps on the way in, then glides.
+ */
+function crossing(o: { y: number; every: number; cross: number; span: number; haze: number; dir: 1 | -1; offset: number; sway: number }): EaglePath {
+  return (t) => {
+    const into = (t + o.offset) % o.every;
+    if (into > o.cross) return undefined;
+    const p = into / o.cross;
+    const from = -o.span * 1.3;
+    const to = 1 + o.span * 1.3;
+    const x = o.dir === 1 ? from + (to - from) * p : to - (to - from) * p;
+    const lift = Math.cos(p * Math.PI * 2.2) * o.sway;
+    return {
+      x,
+      y: o.y + Math.sin(p * Math.PI * 2.2) * o.sway,
+      // Climbing or dropping turns the bird a little on the ground plane.
+      heading: (o.dir === 1 ? 0 : Math.PI) + lift * 3 * o.dir,
+      span: o.span,
+      wings: into < 2.6 ? flapping(into) : 1,
+      bank: lift * 4,
+      haze: o.haze,
+    };
+  };
+}
+
+/**
+ * Eagles riding the air over the forest: a few circling in thermals out over
+ * the valley, one sailing past close by now and then, and one high against
+ * the dawn sky. Seen from above at a slant, as if from a high ridge, so their
+ * backs show: dark wings with fingered tips, white heads and tails. Only keys
+ * a bird is crossing are re-sent.
+ */
+export class EagleFlight extends Layer {
+  #paths: EaglePath[] = [
+    thermal({ cx: 0.27, cy: 0.44, r: 0.08, period: 23, span: 0.03, haze: 0.3, dir: 1, seed: 1 }),
+    thermal({ cx: 0.5, cy: 0.37, r: 0.055, period: 17, span: 0.02, haze: 0.45, dir: -1, seed: 4 }),
+    thermal({ cx: 0.68, cy: 0.58, r: 0.13, period: 31, span: 0.05, haze: 0.12, dir: -1, seed: 2.5 }),
+    crossing({ y: 0.74, every: 38, cross: 15, span: 0.075, haze: 0, dir: 1, offset: 6, sway: 0.05 }),
+    crossing({ y: 0.16, every: 53, cross: 24, span: 0.028, haze: 0.2, dir: -1, offset: 30, sway: 0.03 }),
+  ];
+  #eagles: EagleState[] = [];
+
+  constructor(under: Background) {
+    super(under, 15);
+  }
+
+  protected update(t: number): string {
+    this.#eagles = this.#paths.flatMap((path) => path(t) ?? []);
+    return this.#eagles.map((e) => `${Math.round(e.x * 2000)},${Math.round(e.y * 1000)},${Math.round(e.heading * 50)},${Math.round(e.wings * 20)}`).join(' ');
+  }
+
+  protected paint(ctx: SKRSContext2D, key: KeyRect, size: number, panel: { w: number; h: number }): void {
+    const visible = this.#eagles.filter((e) => {
+      const r = e.span * panel.w * 1.1;
+      const x = e.x * panel.w;
+      const y = e.y * panel.h;
+      return x + r > key.x && x - r < key.x + key.w && y + r > key.y && y - r < key.y + key.h;
+    });
+    if (!visible.length) return;
+    ctx.scale(size / key.w, size / key.h);
+    ctx.translate(-key.x, -key.y);
+    for (const e of visible) drawEagle(ctx, e, panel);
+  }
+}
+
+/** Mix a colour toward the valley haze. */
+function hazed(rgb: [number, number, number], haze: number): string {
+  const HAZE = [120, 130, 140];
+  return `rgb(${rgb.map((c, i) => Math.round(c + (HAZE[i]! - c) * haze)).join(', ')})`;
+}
+
+/**
+ * One eagle from above, in panel pixels. Drawn heading along +x with the
+ * half-span as the unit, then turned to its heading and squashed onto the
+ * ground plane.
+ */
+function drawEagle(ctx: SKRSContext2D, e: EagleState, panel: { w: number; h: number }): void {
+  const unit = e.span * panel.w;
+  ctx.save();
+  ctx.translate(e.x * panel.w, e.y * panel.h);
+  ctx.scale(unit, unit * EAGLE_BODY_SQUASH);
+  ctx.rotate(e.heading);
+
+  // Each wing: broad, with the long primaries spread like fingers at the tip.
+  // The wing on the inside of a turn is foreshortened.
+  const wing = (side: 1 | -1) => {
+    const k = e.wings * (1 - Math.max(0, side * e.bank) * 0.35);
+    const p = (x: number, y: number): [number, number] => [x, side * y * k];
+    ctx.beginPath();
+    ctx.moveTo(...p(0.14, 0.06));
+    ctx.quadraticCurveTo(...p(0.26, 0.42), ...p(0.1, 0.84));
+    // Fingers: tip, notch, tip, ...
+    const fingers: [number, number][] = [
+      [0.07, 1.0], [0.02, 0.88], [-0.02, 0.99], [-0.06, 0.86], [-0.11, 0.96], [-0.14, 0.83], [-0.2, 0.9], [-0.22, 0.8],
+    ];
+    for (const [x, y] of fingers) ctx.lineTo(...p(x, y));
+    ctx.quadraticCurveTo(...p(-0.34, 0.45), ...p(-0.16, 0.07));
+    ctx.closePath();
+    ctx.fill();
+    // Lighter coverts along the front of the wing.
+    ctx.save();
+    ctx.fillStyle = coverts;
+    ctx.beginPath();
+    ctx.moveTo(...p(0.14, 0.06));
+    ctx.quadraticCurveTo(...p(0.26, 0.42), ...p(0.1, 0.84));
+    ctx.quadraticCurveTo(...p(0.06, 0.45), ...p(0.0, 0.07));
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  };
+  const coverts = hazed([72, 52, 30], e.haze);
+  ctx.fillStyle = hazed([38, 26, 15], e.haze);
+  wing(1);
+  wing(-1);
+
+  // Body.
+  ctx.fillStyle = hazed([50, 35, 20], e.haze);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 0.3, 0.085, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // White tail fan and head.
+  const white = hazed([225, 220, 205], e.haze * 0.8);
+  ctx.fillStyle = white;
+  ctx.beginPath();
+  ctx.moveTo(-0.24, 0.06);
+  ctx.lineTo(-0.47, 0.13);
+  ctx.quadraticCurveTo(-0.53, 0, -0.47, -0.13);
+  ctx.lineTo(-0.24, -0.06);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(0.32, 0, 0.09, 0.065, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Yellow beak.
+  ctx.fillStyle = hazed([230, 175, 40], e.haze);
+  ctx.beginPath();
+  ctx.moveTo(0.39, 0.03);
+  ctx.lineTo(0.47, 0);
+  ctx.lineTo(0.39, -0.03);
+  ctx.fill();
+  ctx.restore();
+}
+
 interface Trace {
   points: { x: number; y: number }[];
   length: number;

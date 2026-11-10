@@ -10,19 +10,20 @@ import type { Engine } from './engine.ts';
 import { MicLevel } from './mic.ts';
 import { Pager } from './pages.ts';
 import { Positions } from './positions.ts';
-import { loadLocalConfig, type LilliputConfig } from './config.ts';
+import { Configs, type LilliputConfig, type LocalConfig } from './config.ts';
 import { Lilliput } from './lilliput.ts';
 import { GreenalyzerRecorder, OscRecorder } from './oscrec.ts';
 import type { Widget } from './widget.ts';
 import type { PushHub } from './push.ts';
 import { TouchDesigner } from './td.ts';
 import { TdApi } from './tdapi.ts';
-import { Wallpaper, WALLPAPERS } from './wallpaper.ts';
+import { themesFor, Wallpaper } from './wallpaper.ts';
 import { ClaudeKey, ClaudeSlot } from './widgets/claude.ts';
 import { EndOfDayButton } from './widgets/endofday.ts';
 import { LatencyTester } from './widgets/latency.ts';
 import { LinkButton } from './widgets/link.ts';
 import { MicGainButton, MicMeterSegment, MicReadout } from './widgets/mic.ts';
+import { ConfigButton, ConfigChoice, ConfigLink, ConfirmSwitch, type Guard } from './widgets/config.ts';
 import { PageArrow, PageLink, PageTitle } from './widgets/nav.ts';
 import { Monitor, MonitorHeader, MonitorInputButton, MonitorPreset } from './widgets/monitor.ts';
 import { SdiHeader, SdiInputButton, SdiMonitor, TallyButton, TallyLight } from './widgets/sdi.ts';
@@ -39,37 +40,22 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   const mon2 = new Monitor(2);
   mon1.startPolling();
   mon2.startPolling();
-  const local = loadLocalConfig();
-  // Lilliput monitors from greendeck.local.json. Without an SDI monitor its
-  // buttons just remember what's pressed; people's tallies only appear when
-  // configured, since their names live there too.
-  const lilliput = (config: LilliputConfig) => {
-    const monitor = new Lilliput(config.ip, config.label);
-    monitor.startPolling();
-    return monitor;
-  };
-  const sdiConfig = local.lilliput?.sdi;
-  const sdi = new SdiMonitor(sdiConfig && lilliput(sdiConfig));
-  const people = local.lilliput?.people ?? [];
-  if (people.length > 3) console.warn(`lilliput: only the first 3 of ${people.length} people fit on the Monitors page`);
-  const tallies = people.slice(0, 3).map((p) => new TallyLight(p.name, lilliput({ ...p, label: p.label ?? p.name })));
+  // Which config in configs/ is in use (default.json, or another picked on the
+  // Config page) and what's built from it; switching rebuilds the layouts.
+  const configs = new Configs(configServices, process.env.GREENDECK_CONFIG);
   const td = new TouchDesigner(push, { port: Number(process.env.GREENDECK_TD_PORT ?? 9901) });
   td.start();
-  // The show's TD over HTTP, when greendeck.local.json has a `td` block.
-  const tdApi = local.td && new TdApi(local.td);
-  tdApi?.startPolling();
-  // The show machine's OSC recorder, and the Greenalyzer its listener relays
-  // to, when greendeck.local.json has an `oscRecorder` block.
-  const oscRecorder = local.oscRecorder && new OscRecorder(local.oscRecorder);
-  oscRecorder?.startPolling();
-  const greenalyzer = local.oscRecorder && new GreenalyzerRecorder(local.oscRecorder);
-  greenalyzer?.startPolling();
 
   // Background states, highest priority wins. Claude waiting on you is the
   // first; more (recording, alerts, ...) go here.
   const ambient = new Ambient(push);
   // The resting background under every state; picked from keys on Main.
   const wallpaper = new Wallpaper(ambient);
+  // A theme the new config doesn't offer goes off when switching to it.
+  configs.subscribe(() => {
+    const id = wallpaper.current;
+    if (id && !themesFor(configs.local).some((w) => w.id === id)) void wallpaper.toggle(id);
+  });
   const claude = new ClaudeSessions(push);
   // When something needs you, a red KITT-style scanner sweeps the top row for
   // a few seconds, then rests for 2 minutes, repeating while it's still
@@ -109,10 +95,46 @@ export function createServices(push: PushHub, opts: { brightness: number }) {
   // machine and git-ignored; delete it to reset.
   const positions = new Positions(new URL('../layout.local.json', import.meta.url).pathname);
 
-  return { push, mon1, mon2, sdi, tallies, td, tdApi, oscRecorder, greenalyzer, ambient, wallpaper, attention, claude, brightness, standby, system, fans, mic, positions, local };
+  return { push, mon1, mon2, configs, td, ambient, wallpaper, attention, claude, brightness, standby, system, fans, mic, positions };
 }
 
 export type Services = ReturnType<typeof createServices>;
+
+function guard(label: string, recorder: { readonly recording: boolean; subscribe(fn: () => void): () => void }): Guard {
+  return { label, get recording() { return recorder.recording; }, subscribe: (fn) => recorder.subscribe(fn) };
+}
+
+/**
+ * Everything built from a config file. Rebuilt when the config is switched,
+ * after stop() has ended the old one's polling.
+ */
+function configServices(local: LocalConfig) {
+  const polling: { stopPolling(): void }[] = [];
+  const poll = <T extends { startPolling(): void; stopPolling(): void }>(service: T): T => {
+    service.startPolling();
+    polling.push(service);
+    return service;
+  };
+  // Lilliput monitors. Without an SDI monitor its buttons just remember
+  // what's pressed; people's tallies only appear when configured, since their
+  // names live there too.
+  const lilliput = (config: LilliputConfig) => poll(new Lilliput(config.ip, config.label));
+  const sdiConfig = local.lilliput?.sdi;
+  const sdi = new SdiMonitor(sdiConfig && lilliput(sdiConfig));
+  const people = local.lilliput?.people ?? [];
+  if (people.length > 3) console.warn(`lilliput: only the first 3 of ${people.length} people fit on the Monitors page`);
+  const tallies = people.slice(0, 3).map((p) => new TallyLight(p.name, lilliput({ ...p, label: p.label ?? p.name })));
+  // The show's TD over HTTP, when the config has a `td` block.
+  const tdApi = local.td && poll(new TdApi(local.td));
+  // The show machine's OSC recorder, and the Greenalyzer its listener relays
+  // to, when the config has an `oscRecorder` block.
+  const oscRecorder = local.oscRecorder && poll(new OscRecorder(local.oscRecorder));
+  const greenalyzer = local.oscRecorder && poll(new GreenalyzerRecorder(local.oscRecorder));
+  return {
+    local, sdi, tallies, tdApi, oscRecorder, greenalyzer,
+    stop: () => polling.forEach((service) => service.stopPolling()),
+  };
+}
 
 /**
  * What goes on which key. The XL is 8 columns x 4 rows; key index = row * 8 + col.
@@ -124,17 +146,18 @@ export type Services = ReturnType<typeof createServices>;
  *   │ MON- │ MON- │      │      │CLAUDE│ FANS │ TEMP │ LOAD │
  *   │ SHOW │  TB  │      │      │      │      │      │      │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
- *   │OSC*  │ TC*  │      │      │ link*│ EOD* │      │ MON ›│
- *   │ REC  │ REC  │      │      │      │      │      │      │
+ *   │OSC*  │ TC*  │      │      │ link*│ EOD* │CONFIG│ MON ›│
+ *   │ REC  │ REC  │      │      │      │      │ name │      │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
  *   │  REC │      │      │      │      │      │      │  ▲   │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
  *   │ SLEEP│clock*│      │      │      │ WEB  │ title│  ▼   │
  *   └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
  *   * In standby the clock's key shows WAKE instead, the only lit key.
- *   link*, EOD* and other personal buttons come from greendeck.local.json,
+ *   link*, EOD* and other personal buttons come from the config in use,
  *   and OSC REC* and TC REC* only appear when the OSC listener they talk to
  *   is configured there.
+ *   CONFIG shows the config in use and opens the Config page.
  *   Presets (top left) switch several monitors at once. MON-SHOW puts MON 1
  *   on DP, MON 2 on HDMI and the SDI monitor on SDI 1; MON-TB puts both
  *   Dells on Thunderbolt.
@@ -143,7 +166,8 @@ export type Services = ReturnType<typeof createServices>;
  *   ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
  *   │RAINBO│ EMBER│ OCEAN│ DUSK │CIRCUI│ GRID │ HEX  │ NEON │
  *   └──────┴──────┴──── ……… ────┴──────┴──────┴──────┴──────┘
- *   Wallpapers: press one to show it, the lit one again for black.
+ *   Wallpapers: press one to show it, the lit one again for black. A config
+ *   can hide some and add optional ones (EAGLES) under `themes`.
  *
  *   Monitors (MON › opens it)
  *   ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
@@ -157,10 +181,15 @@ export type Services = ReturnType<typeof createServices>;
  *   │ 1 red│1 grn │ 2 red│2 grn │ 3 red│3 grn │      │      │
  *   └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
  *   The SDI row and the people's tallies below it drive Lilliput monitors
- *   over the LAN (IPs in greendeck.local.json). Tallies are lit only while
+ *   over the LAN (IPs in the config). Tallies are lit only while
  *   held, one colour per tally at a time.
  *
  *   Claude: one key per session (waiting first), on every non-nav key.
+ *
+ *   Config: one key per config file, the one in use lit, and CONFIRM left of
+ *   the title. Tap a config to pick it, then hold CONFIRM for 3 s to switch
+ *   (or, for the one in use, reload its file). The pick is dropped after 15 s
+ *   or on leaving the page, and CONFIRM refuses while anything is recording.
  *
  *   Data
  *   ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
@@ -175,7 +204,8 @@ export type Services = ReturnType<typeof createServices>;
  *   LAT: press to time how fast the deck answers. The mic only listens while
  *   this page is showing.
  */
-export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdApi, oscRecorder, greenalyzer, ambient, wallpaper, claude, brightness, standby, system, fans, mic, positions, local }: Services): Pager {
+export function layout(engine: Engine, { push, mon1, mon2, configs, td, ambient, wallpaper, claude, brightness, standby, system, fans, mic, positions }: Services): Pager {
+  const { local, sdi, tallies, tdApi, oscRecorder, greenalyzer } = configs.current;
   const key = (row: number, col: number) => row * 8 + col;
 
   engine.setBrightness(brightness.value);
@@ -194,7 +224,7 @@ export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdA
   pager.fixed(key(3, 7), new PageArrow(pager, 'down'));
   pager.fixed(key(3, 6), new PageTitle(pager));
 
-  // Personal buttons from greendeck.local.json go on their pages first, so
+  // Personal buttons from the config go on their pages first, so
   // they win a key the built-in layout also uses.
   const putLocal = (page: string, put: (key: number, widget: Widget) => void) => {
     for (const link of local.links ?? []) {
@@ -206,6 +236,15 @@ export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdA
     const eod = local.endOfDay;
     if (eod?.page === page) put(key(...eod.at), new EndOfDayButton(eod.url, { name: eod.name }));
   };
+
+  // The REC key's recorder. With the others, it blocks a config switch while
+  // it's recording.
+  const rec = tdApi ? tdApiRecorder(tdApi) : tdRecorder(td, 'record');
+  const guards: Guard[] = [
+    guard('REC', rec),
+    ...(oscRecorder ? [guard('OSC REC', oscRecorder)] : []),
+    ...(greenalyzer ? [guard('TC REC', greenalyzer)] : []),
+  ];
 
   const page = (name: string, build: (put: (key: number, widget: Widget) => void) => void) =>
     pager.page(name, (put) => {
@@ -222,13 +261,14 @@ export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdA
     put(key(0, 6), new TempKey(system));
     put(key(0, 7), new LoadKey(system));
     put(key(1, 7), new PageLink(pager, 'Monitors', 'MON'));
+    put(key(1, 6), new ConfigLink(pager, configs));
 
     // The show machine's OSC recorder and the timecode Greenalyzer its
     // listener relays to: press to start, hold to stop, like REC.
     if (oscRecorder) put(key(1, 0), new RecordButton(oscRecorder, { label: 'OSC REC' }));
     if (greenalyzer) put(key(1, 1), new RecordButton(greenalyzer, { label: 'TC REC' }));
     // TouchDesigner: names map to parameters in the project's greendeck COMP.
-    put(key(2, 0), new RecordButton(tdApi ? tdApiRecorder(tdApi) : tdRecorder(td, 'record'), { label: 'REC' }));
+    put(key(2, 0), new RecordButton(rec, { label: 'REC' }));
 
     put(key(3, 0), new SleepButton(standby));
     put(key(3, 1), new Clock());
@@ -237,7 +277,7 @@ export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdA
 
   // Wallpapers to pick from, eight to a row.
   page('Themes', (put) => {
-    WALLPAPERS.forEach((choice, i) => put(key(Math.floor(i / 8), i % 8), new WallpaperButton(wallpaper, choice)));
+    themesFor(local).forEach((choice, i) => put(key(Math.floor(i / 8), i % 8), new WallpaperButton(wallpaper, choice)));
   });
 
   // Individual input switching for each monitor.
@@ -265,6 +305,18 @@ export function layout(engine: Engine, { push, mon1, mon2, sdi, tallies, td, tdA
   page('Claude', (put) => {
     let slot = 0;
     for (let k = 0; k < 32; k++) if (!pager.isFixed(k)) put(k, new ClaudeSlot(claude, slot++));
+  });
+
+  // One key per config file. Tapping one only picks it; CONFIRM (held 3 s)
+  // switches, and won't while anything is recording.
+  page('Config', (put) => {
+    const choice = new ConfigChoice();
+    const confirmKey = key(3, 5);
+    put(confirmKey, new ConfirmSwitch(configs, choice, guards));
+    const free = [...Array(32).keys()].filter((k) => !pager.isFixed(k) && k !== confirmKey);
+    const names = configs.names;
+    if (names.length > free.length) console.warn(`config: only ${free.length} of ${names.length} configs fit on the Config page`);
+    names.slice(0, free.length).forEach((name, i) => put(free[i]!, new ConfigButton(configs, choice, name)));
   });
 
   page('Data', (put) => {

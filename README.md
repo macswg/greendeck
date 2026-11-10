@@ -63,16 +63,42 @@ Edit `src/layout.ts` to change what goes on each key.
 | `GREENDECK_VIRTUAL_HOST` | 127.0.0.1 | Set to 0.0.0.0 to reach it from a phone. Anyone on your network can then press buttons |
 | `GREENDECK_VIRTUAL_FPS` | 60 | Browser deck frame-rate cap |
 | `GREENDECK_STATS` | | Set to log fps and keys/s every second |
+| `GREENDECK_CONFIG` | | Start on this config (see below) instead of the one picked last |
 
 ## Personal buttons
 
-Buttons for your own sites, apps and machines go in `greendeck.local.json` (git-ignored),
-not in the code. Copy `greendeck.example.json` to start.
+Buttons for your own sites, apps and machines go in a config file in the
+`configs` folder (git-ignored, and blocked by the pre-commit hook), not in the
+code. Copy `greendeck.example.json` to `configs/default.json` to start.
+
+### Switching configs
+
+For more than one setup (a show, the office, ...), add a file per setup as
+`configs/<name>.json`, in the same format. The CONFIG key on Main shows the config
+in use and opens the Config page, which has a key per config file and a CONFIRM key
+left of the page title. Switching takes two steps so it can't happen by accident:
+tap a config to pick it (it turns amber), then hold CONFIRM for 3 seconds. The deck
+then rebuilds its keys on the new config, staying on the Config page.
+
+- The pick is dropped after 15 seconds, or when you leave the page.
+- CONFIRM refuses while REC, OSC REC or TC REC is recording, and a recording that
+  starts mid-hold cancels the hold.
+- Picking the config already in use and confirming reloads its file, so you can
+  edit it without restarting. New files show up the next time the deck rebuilds.
+
+A config can also change the Themes page: `"themes": { "hide": ["rainbow"], "add":
+["eagles"] }` drops RAINBOW and adds EAGLES, which only appears in configs that add
+it.
+
+The config in use is saved in `configs/active.txt`, so greendeck comes back on it after a
+restart. Before anything's been picked it uses `default`, or the first config by
+name if there's no `default.json`. `GREENDECK_CONFIG=<name>` overrides
+that at startup.
 
 ## Lilliput monitors
 
 The Monitors page's SDI row and the people's tally keys below it control Lilliput
-monitors (UQ23) over UDP. Put them under `lilliput` in `greendeck.local.json`: `sdi`
+monitors (UQ23) over UDP. Put them under `lilliput` in the config: `sdi`
 for the SDI monitor, and `people` (name and IP, up to three) for the red / green
 tally keys. The `label` is the monitor's on-screen label text (a person's defaults
 to their name): the monitor can't report it back, so greendeck resends it with
@@ -92,7 +118,7 @@ In the TD Textport, run `td/install.py` to build a `greendeck` COMP, then map
 names to parameters in its `bindings` table (`name | path | par`).
 
 To drive the show's TD over its HTTP API instead, add a `td` block (`host`,
-`port`, `apiKey`) to `greendeck.local.json`. REC then polls `GET /api/state`
+`port`, `apiKey`) to the config. REC then polls `GET /api/state`
 every second, shows the take's running time, and a press sends
 `POST /api/rec/start`. While recording it becomes a STOP key: pressing sends
 `POST /api/rec/stop/hold`, and `POST /api/rec/stop/release` goes out when the
@@ -102,7 +128,7 @@ the take only if the release comes at least 1.5s after the hold, so the bar take
 
 ## OSC recorder and timecode Greenalyzer
 
-Add an `oscRecorder` block (`host`, `port`) to `greendeck.local.json` for an
+Add an `oscRecorder` block (`host`, `port`) to the config for an
 OSC REC key above REC. It polls `GET /api/status` every second (`recording`
 is null when stopped), a press sends `POST /api/record/start`, and while
 recording it's a STOP key: `POST /api/record/stop` goes out once it's been held

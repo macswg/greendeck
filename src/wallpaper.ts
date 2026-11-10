@@ -1,5 +1,5 @@
 import type { Ambient } from './ambient.ts';
-import { CircuitField, ColorPulse, HexField, ImageBackground, LaserSweep, RainbowWave, WarmGlow, type Background } from './background.ts';
+import { CircuitField, ColorPulse, EagleFlight, HexField, ImageBackground, LaserSweep, RainbowWave, WarmGlow, type Background } from './background.ts';
 
 /** A wallpaper you can pick from a key: its label, a swatch colour for the key, and the background. */
 export interface WallpaperChoice {
@@ -7,6 +7,8 @@ export interface WallpaperChoice {
   label: string;
   swatch: string;
   make: () => Background | Promise<Background>;
+  /** Only on the Themes page of configs that add it (`themes.add`). */
+  optional?: boolean;
 }
 
 const wallpaperPath = (file: string) => new URL(`../assets/wallpapers/${file}`, import.meta.url).pathname;
@@ -39,7 +41,26 @@ export const WALLPAPERS: readonly WallpaperChoice[] = [
   { id: 'hex', label: 'HEX', swatch: '#2a8cff', make: () => new HexField() },
   // A real photo, dimmed: it's bright, and labels need to read on top.
   picture('neon', 'NEON', '#b04cff', 'neon-tunnel.jpg', { dim: 0.45 }),
+  // Eagles circling and sailing over a misty forest valley at dawn, seen from
+  // a high ridge. Only the keys a bird is crossing are re-sent.
+  {
+    id: 'eagles',
+    label: 'EAGLES',
+    swatch: '#c9a25a',
+    optional: true,
+    make: async () => new EagleFlight(await ImageBackground.load(wallpaperPath('forest.png'))),
+  },
 ];
+
+/**
+ * The themes a config offers: the built-in ones minus any it hides, plus any
+ * optional ones it adds, in the built-in order.
+ */
+export function themesFor(config: { themes?: { hide?: string[]; add?: string[] } }): WallpaperChoice[] {
+  const hide = new Set(config.themes?.hide ?? []);
+  const add = new Set(config.themes?.add ?? []);
+  return WALLPAPERS.filter((w) => !hide.has(w.id) && (!w.optional || add.has(w.id)));
+}
 
 /**
  * The resting background, shown when no state (an alert, Claude waiting) is
