@@ -175,7 +175,7 @@ function configServices(local: LocalConfig) {
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
  *   │ MON2 │  DP  │  TB  │ HDMI │      │      │      │      │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
- *   │SDIMON│ SDI 1│ SDI 2│ RED  │GREEN │YELLOW│      │  ▲   │
+ *   │SDIMON│ SDI 1│ SDI 2│ HDMI │ RED  │GREEN │YELLOW│  ▲   │
  *   ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
  *   │PERSON│PERSON│PERSON│PERSON│PERSON│PERSON│ title│  ▼   │
  *   │ 1 red│1 grn │ 2 red│2 grn │ 3 red│3 grn │      │      │
@@ -312,9 +312,10 @@ export function layout(engine: Engine, { push, mon1, mon2, configs, td, ambient,
     put(key(sdiRow, 0), new SdiHeader(sdi));
     put(key(sdiRow, 1), new SdiInputButton(sdi, 1));
     put(key(sdiRow, 2), new SdiInputButton(sdi, 2));
-    put(key(sdiRow, 3), new TallyButton(sdi.tally, 'red'));
-    put(key(sdiRow, 4), new TallyButton(sdi.tally, 'green'));
-    put(key(sdiRow, 5), new TallyButton(sdi.tally, 'yellow'));
+    put(key(sdiRow, 3), new SdiInputButton(sdi, 'hdmi'));
+    put(key(sdiRow, 4), new TallyButton(sdi.tally, 'red'));
+    put(key(sdiRow, 5), new TallyButton(sdi.tally, 'green'));
+    put(key(sdiRow, 6), new TallyButton(sdi.tally, 'yellow'));
     tallies.forEach((light, i) => {
       put(key(sdiRow + 1, i * 2), new TallyButton(light, 'red'));
       put(key(sdiRow + 1, i * 2 + 1), new TallyButton(light, 'green'));
