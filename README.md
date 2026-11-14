@@ -109,8 +109,9 @@ Lilliput control tool.
 For a setup without the two Dell monitors, `"monitors": { "dells": false }` drops
 the MON 1 / MON 2 rows, so the SDI row (and any tally keys) move to the top of the page.
 It also drops the MON-SHOW and MON-TB presets from Main. Add `"sdiOnMain": true`
-to the same block to put copies of SDI 1, SDI 2, RED and GREEN on Main's top left
-instead of the presets.
+to the same block to put the SDI monitor's SDI 1, SDI 2 and HDMI keys on Main's top
+left instead of the presets, with its RED, GREEN and YELLOW tallies on the row below
+(columns 3–5).
 
 ## Browser deck on Tailscale
 

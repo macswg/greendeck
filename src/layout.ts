@@ -185,8 +185,9 @@ function configServices(local: LocalConfig) {
  *   held, one colour per tally at a time. A config with
  *   `"monitors": { "dells": false }` drops the MON1 / MON2 rows and moves
  *   the SDI row and tallies up to the top, and drops MON-SHOW and MON-TB
- *   from Main. `"sdiOnMain": true` there puts copies of SDI 1, SDI 2, RED
- *   and GREEN on Main's top left instead of the presets.
+ *   from Main. `"sdiOnMain": true` there puts SDI 1, SDI 2 and HDMI keys
+ *   on Main's top left instead of the presets, with RED, GREEN and YELLOW
+ *   tallies below them beside TC REC.
  *
  *   Claude: one key per session (waiting first), on every non-nav key.
  *
@@ -261,11 +262,14 @@ export function layout(engine: Engine, { push, mon1, mon2, configs, td, ambient,
     // Top left: either copies of the SDI monitor's keys, or monitor presets
     // that switch several monitors at once. The presets are built around the
     // Dells, so they go when a config drops them.
+    // The SDI copies' tallies sit on the row below, beside OSC REC / TC REC.
     if (local.monitors?.sdiOnMain) {
       put(key(0, 0), new SdiInputButton(sdi, 1));
       put(key(0, 1), new SdiInputButton(sdi, 2));
-      put(key(0, 2), new TallyButton(sdi.tally, 'red'));
-      put(key(0, 3), new TallyButton(sdi.tally, 'green'));
+      put(key(0, 2), new SdiInputButton(sdi, 'hdmi'));
+      put(key(1, 2), new TallyButton(sdi.tally, 'red'));
+      put(key(1, 3), new TallyButton(sdi.tally, 'green'));
+      put(key(1, 4), new TallyButton(sdi.tally, 'yellow'));
     } else if (hasDells) {
       put(key(0, 0), new MonitorPreset('MON-SHOW', [[mon1, 'dp'], [mon2, 'hdmi']], [sdi, 1]));
       put(key(0, 1), new MonitorPreset('MON-TB', [[mon1, 'tb'], [mon2, 'tb']]));

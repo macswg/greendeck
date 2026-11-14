@@ -3,7 +3,16 @@ import { Widget } from '../widget.ts';
 import { colors, roundedFill, text } from '../draw.ts';
 import type { Lilliput } from '../lilliput.ts';
 
-export type SdiInput = 1 | 2;
+export type SdiInput = 1 | 2 | 'hdmi';
+
+/** The monitor's source index for each input (read back from a UQ23). */
+const INPUT_INDEX: Record<SdiInput, number> = { 1: 0, 2: 1, hdmi: 7 };
+const INPUTS: SdiInput[] = [1, 2, 'hdmi'];
+
+/** How an input is named on its keys. */
+export function inputLabel(input: SdiInput): string {
+  return input === 'hdmi' ? 'HDMI' : `SDI ${input}`;
+}
 export type Tally = 'red' | 'green' | 'yellow';
 
 const TALLY_COLORS: Record<Tally, string> = { red: colors.error, green: colors.active, yellow: colors.pending };
@@ -63,7 +72,7 @@ export class SdiMonitor {
   get input(): SdiInput | undefined {
     if (!this.monitor) return this.#input;
     const index = this.monitor.input;
-    return index === 0 || index === 1 ? ((index + 1) as SdiInput) : undefined;
+    return INPUTS.find((input) => INPUT_INDEX[input] === index);
   }
 
   subscribe(fn: () => void): () => void {
@@ -72,7 +81,7 @@ export class SdiMonitor {
   }
 
   setInput(input: SdiInput): void {
-    if (this.monitor) void this.monitor.setInput(input - 1);
+    if (this.monitor) void this.monitor.setInput(INPUT_INDEX[input]);
     else {
       this.#input = input;
       this.#notify();
@@ -107,7 +116,7 @@ abstract class SdiWidget extends Widget {
   }
 }
 
-/** "SDI MON" key showing the current input. Press to toggle SDI 1 ↔ SDI 2. */
+/** "SDI MON" key showing the current input. Press to toggle SDI 1 ↔ SDI 2 (HDMI goes to SDI 1). */
 export class SdiHeader extends SdiWidget {
   onDown(): void {
     this.sdi.setInput(this.sdi.input === 1 ? 2 : 1);
@@ -118,7 +127,7 @@ export class SdiHeader extends SdiWidget {
     text(ctx, 'SDI MON', s / 2, s * 0.36, { size: 22, maxWidth: s - 16 });
     const { input } = this.sdi;
     const down = offline(this.sdi.monitor);
-    text(ctx, input ? `SDI ${input}` : '—', s / 2, s * 0.68, { size: 22, maxWidth: s - 16, color: input && !down ? colors.active : colors.dim });
+    text(ctx, input ? inputLabel(input) : '—', s / 2, s * 0.68, { size: 22, maxWidth: s - 16, color: input && !down ? colors.active : colors.dim });
     if (down) text(ctx, 'offline', s / 2, s * 0.88, { size: 11, maxWidth: s - 16, color: colors.dim, weight: 'normal' });
   }
 }
@@ -139,7 +148,7 @@ export class SdiInputButton extends SdiWidget {
   render(ctx: SKRSContext2D, s: number): void {
     const on = this.sdi.input === this.#input;
     roundedFill(ctx, s, on ? colors.active : colors.bg);
-    text(ctx, `SDI ${this.#input}`, s / 2, s / 2, { size: 26, maxWidth: s - 16, color: on ? '#000' : colors.text });
+    text(ctx, inputLabel(this.#input), s / 2, s / 2, { size: 26, maxWidth: s - 16, color: on ? '#000' : colors.text });
   }
 }
 
