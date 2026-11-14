@@ -182,7 +182,11 @@ function configServices(local: LocalConfig) {
  *   └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
  *   The SDI row and the people's tallies below it drive Lilliput monitors
  *   over the LAN (IPs in the config). Tallies are lit only while
- *   held, one colour per tally at a time.
+ *   held, one colour per tally at a time. A config with
+ *   `"monitors": { "dells": false }` drops the MON1 / MON2 rows and moves
+ *   the SDI row and tallies up to the top, and drops MON-SHOW and MON-TB
+ *   from Main. `"sdiOnMain": true` there puts copies of SDI 1, SDI 2, RED
+ *   and GREEN on Main's top left instead of the presets.
  *
  *   Claude: one key per session (waiting first), on every non-nav key.
  *
@@ -207,6 +211,7 @@ function configServices(local: LocalConfig) {
 export function layout(engine: Engine, { push, mon1, mon2, configs, td, ambient, wallpaper, claude, brightness, standby, system, fans, mic, positions }: Services): Pager {
   const { local, sdi, tallies, tdApi, oscRecorder, greenalyzer } = configs.current;
   const key = (row: number, col: number) => row * 8 + col;
+  const hasDells = local.monitors?.dells !== false;
 
   engine.setBrightness(brightness.value);
   engine.onStop(brightness.subscribe(() => engine.setBrightness(brightness.value)));
@@ -253,9 +258,18 @@ export function layout(engine: Engine, { push, mon1, mon2, configs, td, ambient,
     });
 
   page('Main', (put) => {
-    // Top left: monitor presets that switch several monitors at once.
-    put(key(0, 0), new MonitorPreset('MON-SHOW', [[mon1, 'dp'], [mon2, 'hdmi']], [sdi, 1]));
-    put(key(0, 1), new MonitorPreset('MON-TB', [[mon1, 'tb'], [mon2, 'tb']]));
+    // Top left: either copies of the SDI monitor's keys, or monitor presets
+    // that switch several monitors at once. The presets are built around the
+    // Dells, so they go when a config drops them.
+    if (local.monitors?.sdiOnMain) {
+      put(key(0, 0), new SdiInputButton(sdi, 1));
+      put(key(0, 1), new SdiInputButton(sdi, 2));
+      put(key(0, 2), new TallyButton(sdi.tally, 'red'));
+      put(key(0, 3), new TallyButton(sdi.tally, 'green'));
+    } else if (hasDells) {
+      put(key(0, 0), new MonitorPreset('MON-SHOW', [[mon1, 'dp'], [mon2, 'hdmi']], [sdi, 1]));
+      put(key(0, 1), new MonitorPreset('MON-TB', [[mon1, 'tb'], [mon2, 'tb']]));
+    }
     put(key(0, 4), new ClaudeKey(claude));
     put(key(0, 5), new FanKey(system, fans));
     put(key(0, 6), new TempKey(system));
@@ -281,22 +295,25 @@ export function layout(engine: Engine, { push, mon1, mon2, configs, td, ambient,
   });
 
   // Individual input switching for each monitor.
+  // A config can drop the Dells' rows, moving the Lilliput rows up.
   page('Monitors', (put) => {
-    for (const [row, mon] of [[0, mon1], [1, mon2]] as const) {
+    const dells = hasDells ? [mon1, mon2] : [];
+    dells.forEach((mon, row) => {
       put(key(row, 0), new MonitorHeader(mon));
       put(key(row, 1), new MonitorInputButton(mon, 'dp'));
       put(key(row, 2), new MonitorInputButton(mon, 'tb'));
       put(key(row, 3), new MonitorInputButton(mon, 'hdmi'));
-    }
-    put(key(2, 0), new SdiHeader(sdi));
-    put(key(2, 1), new SdiInputButton(sdi, 1));
-    put(key(2, 2), new SdiInputButton(sdi, 2));
-    put(key(2, 3), new TallyButton(sdi.tally, 'red'));
-    put(key(2, 4), new TallyButton(sdi.tally, 'green'));
-    put(key(2, 5), new TallyButton(sdi.tally, 'yellow'));
+    });
+    const sdiRow = dells.length;
+    put(key(sdiRow, 0), new SdiHeader(sdi));
+    put(key(sdiRow, 1), new SdiInputButton(sdi, 1));
+    put(key(sdiRow, 2), new SdiInputButton(sdi, 2));
+    put(key(sdiRow, 3), new TallyButton(sdi.tally, 'red'));
+    put(key(sdiRow, 4), new TallyButton(sdi.tally, 'green'));
+    put(key(sdiRow, 5), new TallyButton(sdi.tally, 'yellow'));
     tallies.forEach((light, i) => {
-      put(key(3, i * 2), new TallyButton(light, 'red'));
-      put(key(3, i * 2 + 1), new TallyButton(light, 'green'));
+      put(key(sdiRow + 1, i * 2), new TallyButton(light, 'red'));
+      put(key(sdiRow + 1, i * 2 + 1), new TallyButton(light, 'green'));
     });
   });
 

@@ -106,6 +106,12 @@ every tally change. greendeck uses local UDP port 19522,
 which only one program can receive on, so quit greendeck before using another
 Lilliput control tool.
 
+For a setup without the two Dell monitors, `"monitors": { "dells": false }` drops
+the MON 1 / MON 2 rows, so the SDI row (and any tally keys) move to the top of the page.
+It also drops the MON-SHOW and MON-TB presets from Main. Add `"sdiOnMain": true`
+to the same block to put copies of SDI 1, SDI 2, RED and GREEN on Main's top left
+instead of the presets.
+
 ## Browser deck on Tailscale
 
 To use the browser deck from your other devices, share it on your tailnet (HTTPS,

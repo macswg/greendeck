@@ -59,6 +59,13 @@ export interface LocalConfig {
    * red / green keys on its bottom row (up to three, in order).
    */
   lilliput?: { sdi?: LilliputConfig; people?: PersonTallyConfig[] };
+  /**
+   * The Monitors page. `dells: false` drops the MON 1 / MON 2 rows, moving
+   * the Lilliput rows up to the top, and the MON-SHOW / MON-TB presets on Main.
+   * `sdiOnMain: true` copies SDI 1, SDI 2, RED and GREEN to Main's top left,
+   * in place of those presets.
+   */
+  monitors?: { dells?: boolean; sdiOnMain?: boolean };
   /** When set, the REC key drives this TD instead of the local greendeck.tox link. */
   td?: TdApiConfig;
   /** When set, Main gets OSC REC and TC REC keys above REC. */
